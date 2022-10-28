@@ -4,6 +4,7 @@
 #include "ring_buffer.h"
 #include <jack/jack.h>
 #include <string>
+#include <string_view>
 
 class JackModule {
 public:
@@ -16,10 +17,10 @@ public:
     void setNumInputChannels (int n);
     void setNumOutputChannels (int n);
     int init();
-    int init (std::string clientName);
+    int init (std::string_view clientName);
     unsigned long getSamplerate();
     void autoConnect();
-    void autoConnect (std::string inputClient, std::string outputClient);
+    void autoConnect (std::string_view inputClient, std::string_view outputClient);
     uint64_t readSamples (float*, uint64_t);
     uint64_t writeSamples (float*, uint64_t);
     void end();
@@ -37,7 +38,6 @@ private:
     int numberOfInputChannels = 2;
     int numberOfOutputChannels = 2;
     jack_client_t* client;
-    const char** ports;
     RingBuffer<SampleType> inputRingBuffer;
     RingBuffer<SampleType> outputRingBuffer;
 
@@ -122,18 +122,18 @@ int JackModule::_wrap_jack_process_cb (jack_nframes_t numFrames, void* self) {
 
 int JackModule::onProcess (jack_nframes_t numFrames) {
     for (auto channel = 0; channel < numberOfInputChannels; ++channel) {
-        inputbuffer[channel] = (SampleType*) jack_port_get_buffer (input_port[channel], numFrames);
+        inputbuffer[channel] = (SampleType*) jack_port_get_buffer (inputPorts[channel], numFrames);
     }
 
     for (auto channel = 0; channel < numberOfOutputChannels; ++channel) {
-        outputbuffer[channel] = (SampleType*) jack_port_get_buffer (output_port[channel], numFrames);
+        outputbuffer[channel] = (SampleType*) jack_port_get_buffer (outputPorts[channel], numFrames);
     }
 
     // push input samples from JACK channel buffers to the input ringbuffer
     // interleave the samples before writing them to the ringbuffer
     for (auto frame = 0; frame < static_cast<int> (numFrames); ++frame) {
         for (auto channel = 0; channel < numberOfInputChannels; ++channel) {
-            tempBuffer[frame * numberOfInputChannels + channel] = inputbuffer[channel][frame];
+            tempBuffer[frame * numberOfInputChannels + channel] = inputBuffers[channel][frame];
         }
     }
 
@@ -148,7 +148,7 @@ int JackModule::onProcess (jack_nframes_t numFrames) {
     // appropriate JACK output buffers
     for (auto frame = 0; frame < static_cast<int> (numFrames); ++frame) {
         for (auto channel = 0; channel < numberOfOutputChannels; ++channel) {
-            outputbuffer[channel][frame] = tempbuffer[frame * numberOfOutputChannels + channel];
+            outputBuffers[channel][frame] = tempbuffer[frame * numberOfOutputChannels + channel];
         }
     }
 
@@ -181,15 +181,17 @@ void JackModule::autoConnect() {
     autoConnect ("system", "system");
 }
 
-
-void JackModule::autoConnect (std::string inputClient, std::string outputClient) {
+void JackModule::autoConnect (std::string_view inputClient, std::string_view outputClient) {
     if (numberOfInputChannels > 0) {
-        ports = jack_get_ports (client, inputClient.c_str(), NULL, JackPortIsOutput);
-        if (ports == NULL) {
+        auto ports = std::unique_ptr {
+            jack_get_ports (client, inputClient.data(), nullptr, JackPortIsOutput),
+            [](jack_port_t* p) { free(p); }
+        };
+
+        if (ports == nullptr) {
             std::cout << "Cannot find capture ports associated with " << inputClient << ", trying 'system'." << std::endl;
-            // try "system"
-            ports = jack_get_ports (client, "system", NULL, JackPortIsOutput);
-            if (ports == NULL) {
+            ports = jack_get_ports (client, "system", nullptr, JackPortIsOutput);
+            if (ports == nullptr) {
                 std::cout << "Cannot find system capture ports. Continuing without inputs." << std::endl;
                 // both attempts failed, continue without capture ports
                 numberOfInputChannels = 0;
@@ -197,22 +199,20 @@ void JackModule::autoConnect (std::string inputClient, std::string outputClient)
         }      // if specified not found
 
         // find out the number of (not-null) ports on the source client
-        int nrofinputports = 0;
-        while (ports[nrofinputports])
-            ++nrofinputports;
-        std::cout << "Source client has " << nrofinputports << " ports " << std::endl;
+        auto numInputPorts = 0;
+        while (ports[numInputPorts])
+            ++numInputPorts;
+        std::cout << "Source client has " << numInputPorts << " ports" << std::endl;
 
-        int inputportindex = 0;
+        auto inputPortIndex = 0;
         for (int channel = 0; channel < numberOfInputChannels; channel++) {
             std::cout << "connect input channel " << channel << std::endl;
-            if (jack_connect (client, ports[inputportindex], jack_port_name (input_port[channel]))) {
+            if (jack_connect (client, ports[inputPortIndex], jack_port_name (input_port[channel]))) {
                 std::cout << "Cannot connect input ports" << std::endl;
             }
-            ++inputportindex;
-            if (nrofinputports > 0) inputportindex %= nrofinputports;
-        }  // for channel
-
-        free (ports);  // ports structure no longer needed
+            ++inputPortIndex;
+            if (numInputPorts > 0) inputPortIndex %= numInputPorts;
+        }
     }
 
     /*
@@ -251,7 +251,7 @@ void JackModule::autoConnect (std::string inputClient, std::string outputClient)
         free (ports);  // ports structure no longer needed
     }
 
-}  // autoConnect()
+}
 
 
 void JackModule::end() {
