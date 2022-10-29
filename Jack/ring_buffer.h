@@ -51,11 +51,11 @@ public:
 
         // wrap if needed
         if (currentWriteIndex + numToWrite <= buffer.size()) {
-            memcpy (buffer + currentWriteIndex, data, numToWrite * itemSize);
+            memcpy (buffer.begin() + currentWriteIndex, data, numToWrite * itemSize);
         } else {
             const auto firstChunk = buffer.size() - currentWriteIndex;
-            memcpy (buffer + currentWriteIndex, data, firstChunk * itemSize);
-            memcpy (buffer, data + firstChunk, (numToWrite - firstChunk) * itemSize);
+            memcpy (buffer.begin() + currentWriteIndex, data, firstChunk * itemSize);
+            memcpy (buffer.begin(), data + firstChunk, (numToWrite - firstChunk) * itemSize);
         }
 
         writeIndex.store ((currentWriteIndex + numToWrite) % buffer.size());
@@ -79,11 +79,11 @@ public:
 
         // wrap if needed
         if (currentReadIndex + numToRead <= buffer.size()) {
-            memcpy (data, buffer + currentReadIndex, numToRead * itemSize);
+            memcpy (data, buffer.begin() + currentReadIndex, numToRead * itemSize);
         } else {
             const auto firstChunk = buffer.size() - currentReadIndex;
-            memcpy (data, buffer + currentReadIndex, firstChunk * itemSize);
-            memcpy (data + firstChunk, buffer, (numToRead - firstChunk) * itemSize);
+            memcpy (data, buffer.begin() + currentReadIndex, firstChunk * itemSize);
+            memcpy (data + firstChunk, buffer.begin(), (numToRead - firstChunk) * itemSize);
         }
 
         readIndex.store ((currentReadIndex + numToRead) % buffer.size());
