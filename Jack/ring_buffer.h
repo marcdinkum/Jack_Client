@@ -51,11 +51,12 @@ public:
 
         // wrap if needed
         if (currentWriteIndex + numToWrite <= buffer.size()) {
-            memcpy (buffer.begin() + currentWriteIndex, data, numToWrite * itemSize);
+            const auto start = buffer.begin() + currentWriteIndex;
+            std::copy (data, data + numToWrite, start);
         } else {
             const auto firstChunk = buffer.size() - currentWriteIndex;
-            memcpy (buffer.begin() + currentWriteIndex, data, firstChunk * itemSize);
-            memcpy (buffer.begin(), data + firstChunk, (numToWrite - firstChunk) * itemSize);
+            std::copy (data, data + firstChunk, buffer.begin());
+            std::copy (data + firstChunk, data + firstChunk + (numToWrite - firstChunk), buffer.begin() + firstChunk);
         }
 
         writeIndex.store ((currentWriteIndex + numToWrite) % buffer.size());
@@ -71,7 +72,8 @@ public:
             while ((space = numItemsAvailableForRead()) < numSamples)
                 usleep (static_cast<useconds_t> (blockingNap));
 
-        if (space == 0) return 0;
+        if (space == 0)
+            return 0;
 
         const auto numToRead = numSamples <= space ? numSamples : space;
 
@@ -79,11 +81,11 @@ public:
 
         // wrap if needed
         if (currentReadIndex + numToRead <= buffer.size()) {
-            memcpy (data, buffer.begin() + currentReadIndex, numToRead * itemSize);
+            std::copy (buffer.begin(), buffer.begin() + numToRead, data);
         } else {
             const auto firstChunk = buffer.size() - currentReadIndex;
-            memcpy (data, buffer.begin() + currentReadIndex, firstChunk * itemSize);
-            memcpy (data + firstChunk, buffer.begin(), (numToRead - firstChunk) * itemSize);
+            std::copy (buffer.begin() + currentReadIndex, buffer.begin() + currentReadIndex + firstChunk, data);
+            std::copy (buffer.begin(), buffer.begin() + (numToRead - firstChunk), data + firstChunk);
         }
 
         readIndex.store ((currentReadIndex + numToRead) % buffer.size());
