@@ -40,7 +40,6 @@
 #include <iostream>
 #include <jack/jack.h>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <unistd.h>
@@ -49,15 +48,15 @@
 struct AudioBuffer {
     const float** inputChannels;
     float** outputChannels;
-    int numInputChannels;
-    int numOutputChannels;
-    int numFrames;
+    const int numInputChannels;
+    const int numOutputChannels;
+    const int numFrames;
 };
 
 class AudioCallback {
 public:
     virtual void prepare (uint64_t sampleRate) {}
-    virtual void process (AudioBuffer buffer) {}
+    virtual void process (AudioBuffer buffer) noexcept {}
 };
 
 // FIXME JackModule needs regie over de timing.
@@ -91,11 +90,11 @@ public:
     void init (std::string_view clientName);
 
     void setAudioCallback (AudioCallback& audioCallback) {
-        callback.prepare (getSampleRate());
+        audioCallback.prepare (getSampleRate());
         callback = &audioCallback;
     }
 
-    uint64_t getSampleRate() {
+    uint64_t getSampleRate() const {
         return jack_get_sample_rate (client);
     }
 
@@ -151,7 +150,7 @@ static void jack_shutdown (void*);
 void JackModule::init (std::string_view clientName) {
     client = jack_client_open (clientName.data(), JackNoStartServer, nullptr);
 
-    if (! client) {
+    if (client == nullptr) {
         throw std::runtime_error { "JACK server not running" };
     }
 
@@ -198,8 +197,8 @@ int JackModule::onProcess (jack_nframes_t numFrames) {
         const auto buffer = AudioBuffer {
             .inputChannels = const_cast<const float**> (inputBuffers.data()),
             .outputChannels = outputBuffers.data(),
-            .numOutputChannels = static_cast<int> (outputBuffers.size()),
             .numInputChannels = static_cast<int> (inputBuffers.size()),
+            .numOutputChannels = static_cast<int> (outputBuffers.size()),
             .numFrames = static_cast<int> (numFrames),
         };
         callback->process (buffer);
