@@ -1,29 +1,92 @@
+/**********************************************************************
+ *          Copyright (c) 2022, Hogeschool voor de Kunsten Utrecht
+ *                      Hilversum, the Netherlands
+ *                          All rights reserved
+ ***********************************************************************
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.
+ *  If not, see <http://www.gnu.org/licenses/>.
+ ***********************************************************************
+ *
+ *  File name     : jack_module.h
+ *  System name   : jack_module
+ *
+ *  Description   : C++ abstraction for JACK Audio Connection Kit
+ *
+ *
+ *  Authors       : Marc Groenewegen,
+ *                  Wouter Ensink,
+ *                  Daan Schrier
+ *  E-mails       : marc.groenewegen@hku.nl,
+ *                  wouter.ensink@student.hku.nl,
+ *                  Daan@Daansdotorg.wordpress.com
+ *
+ **********************************************************************/
+
 
 #pragma once
 
 #include "ring_buffer.h"
+#include <array>
+#include <iostream>
 #include <jack/jack.h>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <unistd.h>
+#include <vector>
+
 
 class JackModule {
 public:
     using SampleType = jack_default_audio_sample_t;
 
     JackModule();
-    JackModule (uint16_t inputBufSize, uint64_t inputBufSize);
+    JackModule (uint64_t inputBufSize, uint64_t outputBufSize);
     ~JackModule();
 
     void setNumInputChannels (int n);
     void setNumOutputChannels (int n);
-    int init();
-    int init (std::string_view clientName);
-    unsigned long getSamplerate();
-    void autoConnect();
+    void init();
+    void init (std::string_view clientName);
+
+    uint64_t getSampleRate() {
+        return jack_get_sample_rate (client);
+    }
+
+    void autoConnect() {
+        autoConnect ("system", "system");
+    }
+
     void autoConnect (std::string_view inputClient, std::string_view outputClient);
-    uint64_t readSamples (float*, uint64_t);
-    uint64_t writeSamples (float*, uint64_t);
-    void end();
+
+    uint64_t readSamples (float* target, uint64_t numSamples) {
+        return inputRingBuffer.pop (target, numSamples);
+    }
+
+    uint64_t writeSamples (float* source, uint64_t numSamples) {
+        return outputRingBuffer.pop (source, numSamples);
+    }
+
+    void end(){
+        jack_deactivate (client);
+
+        for (auto port : inputPorts)
+            jack_port_disconnect (client, port);
+
+        for (auto port : outputPorts)
+            jack_port_disconnect (client, port);
+    }
 
 private:
     static int _wrap_jack_process_cb (jack_nframes_t numFrames, void* self);
@@ -48,13 +111,6 @@ private:
 };
 
 
-#include <iostream>
-#include <mutex>
-#include <sstream>
-#include <unistd.h>
-
-#include "jack_module.h"
-
 // prototypes & globals
 static void jack_shutdown (void*);
 
@@ -75,13 +131,13 @@ JackModule::~JackModule() {
 }
 
 
-int JackModule::init() {
+void JackModule::init() {
     return init ("JackModule");
 }
 
 
-int JackModule::init (std::string clientName) {
-    client = jack_client_open (clientName.c_str(), JackNoStartServer, nullptr);
+void JackModule::init (std::string_view clientName) {
+    client = jack_client_open (clientName.data(), JackNoStartServer, nullptr);
 
     if (! client) {
         throw std::runtime_error { "JACK server not running" };
@@ -91,27 +147,27 @@ int JackModule::init (std::string clientName) {
     jack_set_process_callback (client, _wrap_jack_process_cb, this);
 
     inputPorts.clear();
-    for (int channel = 0; channel < numberOfInputChannels; channel++) {
+    for (auto channel = 0; channel < numberOfInputChannels; ++channel) {
         const auto name = "input_" + std::to_string (channel + 1);
-        const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, nullptr);
+        const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
         inputPorts.push_back (port);
     }
 
     outputPorts.clear();
-    for (int channel = 0; channel < numberOfOutputChannels; channel++) {
+    for (auto channel = 0; channel < numberOfOutputChannels; ++channel) {
         const auto name = "output_" + std::to_string (channel + 1);
-        const auto port = jack_port_register (client, name.c_, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, nullptr);
+        const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
         outputPorts.push_back (port);
     }
 
     // create buffer arrays of void pointers to prevent memory allocation inside
     // the process loop
 
-    inputbuffer.resize (numberOfInputChannels);
-    outputbuffer.resize (numberOfOutputChannels);
+    inputBuffers.resize (numberOfInputChannels);
+    outputBuffers.resize (numberOfOutputChannels);
 
     if (jack_activate (client)) {
-        std::runtime_error { "cannot activate client" };
+        throw std::runtime_error { "cannot activate client" };
     }
 }
 
@@ -122,11 +178,11 @@ int JackModule::_wrap_jack_process_cb (jack_nframes_t numFrames, void* self) {
 
 int JackModule::onProcess (jack_nframes_t numFrames) {
     for (auto channel = 0; channel < numberOfInputChannels; ++channel) {
-        inputbuffer[channel] = (SampleType*) jack_port_get_buffer (inputPorts[channel], numFrames);
+        inputBuffers[channel] = (SampleType*) jack_port_get_buffer (inputPorts[channel], numFrames);
     }
 
     for (auto channel = 0; channel < numberOfOutputChannels; ++channel) {
-        outputbuffer[channel] = (SampleType*) jack_port_get_buffer (outputPorts[channel], numFrames);
+        outputBuffers[channel] = (SampleType*) jack_port_get_buffer (outputPorts[channel], numFrames);
     }
 
     // push input samples from JACK channel buffers to the input ringbuffer
@@ -137,7 +193,7 @@ int JackModule::onProcess (jack_nframes_t numFrames) {
         }
     }
 
-    const auto framesPushed = inputRingBuffer->push ((SampleType*) tempbuffer, numFrames * numberOfInputChannels);
+    const auto framesPushed = inputRingBuffer.push ((SampleType*) tempBuffer, numFrames * numberOfInputChannels);
     assert (framesPushed >= numFrames * numberOfInputChannels);
 
     const auto framesPopped = outputRingBuffer.pop ((SampleType*) tempbuffer, numFrames * numberOfOutputChannels);
@@ -148,7 +204,7 @@ int JackModule::onProcess (jack_nframes_t numFrames) {
     // appropriate JACK output buffers
     for (auto frame = 0; frame < static_cast<int> (numFrames); ++frame) {
         for (auto channel = 0; channel < numberOfOutputChannels; ++channel) {
-            outputBuffers[channel][frame] = tempbuffer[frame * numberOfOutputChannels + channel];
+            outputBuffers[channel][frame] = tempBuffer[frame * numberOfOutputChannels + channel];
         }
     }
 
@@ -165,27 +221,18 @@ void JackModule::setNumInputChannels (int n) {
 
 
 void JackModule::setNumOutputChannels (int n) {
-    if (n > MAX_OUTPUT_CHANNELS) {
+    if (n > MAX_OUTPUT_CHANNELS || n < 0) {
         throw std::runtime_error { "invalid number of output channels" };
     }
     numberOfOutputChannels = n;
 }
 
 
-unsigned long JackModule::getSamplerate() {
-    return jack_get_sample_rate (client);
-}
-
-
-void JackModule::autoConnect() {
-    autoConnect ("system", "system");
-}
-
 void JackModule::autoConnect (std::string_view inputClient, std::string_view outputClient) {
     if (numberOfInputChannels > 0) {
         auto ports = std::unique_ptr {
             jack_get_ports (client, inputClient.data(), nullptr, JackPortIsOutput),
-            [](jack_port_t* p) { free(p); }
+            [] (jack_port_t* p) { free (p); }
         };
 
         if (ports == nullptr) {
@@ -220,12 +267,12 @@ void JackModule::autoConnect (std::string_view inputClient, std::string_view out
    * regard this as an output from our perspective
    */
     if (numberOfOutputChannels > 0) {
-        ports = jack_get_ports (client, outputClient.c_str(), NULL, JackPortIsInput);
-        if (ports == NULL) {
+        ports = jack_get_ports (client, outputClient.data(), nullptr, JackPortIsInput);
+        if (ports == nullptr) {
             std::cout << "Cannot find output ports associated with " << outputClient << ", trying 'system'." << std::endl;
             // try "system"
-            ports = jack_get_ports (client, "system", NULL, JackPortIsInput);
-            if (ports == NULL) {
+            ports = jack_get_ports (client, "system", nullptr, JackPortIsInput);
+            if (ports == nullptr) {
                 std::cout << "Cannot find system output ports. Continuing without outputs." << std::endl;
                 // both attempts failed, continue without output port
                 numberOfOutputChannels = 0;
@@ -251,33 +298,15 @@ void JackModule::autoConnect (std::string_view inputClient, std::string_view out
         free (ports);  // ports structure no longer needed
     }
 
-}
+}  // autoconnect() <- end of functie (autoconnect functie) [end]
 
 
 void JackModule::end() {
-    jack_deactivate (client);
-    for (int channel = 0; channel < numberOfInputChannels; channel++)
-        jack_port_disconnect (client, input_port[channel]);
-    for (int channel = 0; channel < numberOfOutputChannels; channel++)
-        jack_port_disconnect (client, output_port[channel]);
+
 }
 
 
-unsigned long JackModule::readSamples (float* ptr, unsigned long nrofsamples) {
-    // pop samples from JACK inputbuffer and hand over to the caller
-    return inputRingBuffer.pop (ptr, nrofsamples);
-}
 
-
-unsigned long JackModule::writeSamples (float* ptr, unsigned long nrofsamples) {
-    // push samples from the caller to the JACK outputbuffer
-    return outputRingBuffer.push (ptr, nrofsamples);
-}
-
-
-/*
- * shutdown callback may be called by JACK
- */
-static void jack_shutdown (void* arg) {
+static void jack_shutdown ([[maybe_unused]] void* arg) {
     exit (1);
 }
