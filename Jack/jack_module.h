@@ -36,7 +36,6 @@
 
 #pragma once
 
-#include "ring_buffer.h"
 #include <array>
 #include <iostream>
 #include <jack/jack.h>
@@ -47,47 +46,72 @@
 #include <unistd.h>
 #include <vector>
 
+struct AudioBuffer {
+    const float** inputChannels;
+    float** outputChannels;
+    int numInputChannels;
+    int numOutputChannels;
+    int numFrames;
+};
 
+class AudioCallback {
+public:
+    virtual void prepare (uint64_t sampleRate) {}
+    virtual void process (AudioBuffer buffer) {}
+};
+
+// FIXME JackModule needs regie over de timing.
 class JackModule {
 public:
     using SampleType = jack_default_audio_sample_t;
 
-    JackModule();
-    JackModule (uint64_t inputBufSize, uint64_t outputBufSize);
-    ~JackModule();
+
+    ~JackModule() {
+        end();
+    }
 
     void setNumInputChannels (int n) {
         if (n > MAX_INPUT_CHANNELS || n < 0) {
             throw std::runtime_error { "invalid number of input channels" };
         }
-        numberOfInputChannels = n;
+        numInputChannels = n;
     }
+
     void setNumOutputChannels (int n) {
         if (n > MAX_OUTPUT_CHANNELS || n < 0) {
             throw std::runtime_error { "invalid number of output channels" };
         }
-        numberOfOutputChannels = n;
+        numOutputChannels = n;
     }
-    void init();
+
+    void init() {
+        return init ("JackModule");
+    }
+
     void init (std::string_view clientName);
+
+    void setAudioCallback (AudioCallback& audioCallback) {
+        callback.prepare (getSampleRate());
+        callback = &audioCallback;
+    }
 
     uint64_t getSampleRate() {
         return jack_get_sample_rate (client);
     }
 
+    void autoConnect (std::string_view inputClient, std::string_view outputClient) {
+        connectInput (inputClient);
+        connectOutput (outputClient);
+    }
+
     void autoConnect() {
-        autoConnect ("system", "system");
+        connectInput ("system");
+        connectOutput ("system");
     }
 
-    void autoConnect (std::string_view inputClient, std::string_view outputClient);
+    void connectInput (std::string_view);
+    void connectOutput (std::string_view);
 
-    uint64_t readSamples (SampleType* target, uint64_t numSamples) {
-        return inputRingBuffer.pop (target, numSamples);
-    }
-
-    uint64_t writeSamples (SampleType* source, uint64_t numSamples) {
-        return outputRingBuffer.pop (source, numSamples);
-    }
 
     void end() {
         jack_deactivate (client);
@@ -101,50 +125,27 @@ public:
 
 private:
     static int _wrap_jack_process_cb (jack_nframes_t numFrames, void* self);
+
+    AudioCallback* callback = nullptr;
+
     std::vector<jack_port_t*> inputPorts;
     std::vector<jack_port_t*> outputPorts;
 
     std::vector<SampleType*> inputBuffers;
     std::vector<SampleType*> outputBuffers;
 
-    std::array<SampleType, 10000> tempBuffer { 0.0 };  // FIXME // find acually size??
+    std::array<SampleType, 10000> tempBuffer { 0.0 };
     int onProcess (jack_nframes_t numFrames);
-    int numberOfInputChannels = 2;
-    int numberOfOutputChannels = 2;
+    int numInputChannels = 2;
+    int numOutputChannels = 2;
     jack_client_t* client;
-    RingBuffer<SampleType> inputRingBuffer;
-    RingBuffer<SampleType> outputRingBuffer;
-
-    static constexpr auto DEFAULT_IN_RINGBUF_SIZE = 30000;
-    static constexpr auto DEFAULT_OUT_RINGBUF_SIZE = 30000;
-    static constexpr auto MAX_INPUT_CHANNELS = 2;
+    static constexpr auto MAX_INPUT_CHANNELS = 4;
     static constexpr auto MAX_OUTPUT_CHANNELS = 2;
 };
 
 
 // prototypes & globals
 static void jack_shutdown (void*);
-
-
-JackModule::JackModule() : JackModule (DEFAULT_IN_RINGBUF_SIZE, DEFAULT_OUT_RINGBUF_SIZE) {}
-
-JackModule::JackModule (uint64_t inputBufSize, uint64_t outputBufSize) : inputRingBuffer (inputBufSize, "in"),
-                                                                         outputRingBuffer (outputBufSize, "out") {
-    inputRingBuffer.popMayBlock (true);
-    inputRingBuffer.setBlockingNapMicroSeconds (500);
-    outputRingBuffer.pushMayBlock (true);
-    outputRingBuffer.setBlockingNapMicroSeconds (500);
-}
-
-
-JackModule::~JackModule() {
-    end();
-}
-
-
-void JackModule::init() {
-    return init ("JackModule");
-}
 
 
 void JackModule::init (std::string_view clientName) {
@@ -158,24 +159,21 @@ void JackModule::init (std::string_view clientName) {
     jack_set_process_callback (client, _wrap_jack_process_cb, this);
 
     inputPorts.clear();
-    for (auto channel = 0; channel < numberOfInputChannels; ++channel) {
+    for (auto channel = 0; channel < numInputChannels; ++channel) {
         const auto name = "input_" + std::to_string (channel + 1);
         const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
         inputPorts.push_back (port);
     }
 
     outputPorts.clear();
-    for (auto channel = 0; channel < numberOfOutputChannels; ++channel) {
+    for (auto channel = 0; channel < numOutputChannels; ++channel) {
         const auto name = "output_" + std::to_string (channel + 1);
         const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
         outputPorts.push_back (port);
     }
 
-    // create buffer arrays of void pointers to prevent memory allocation inside
-    // the process loop
-
-    inputBuffers.resize (numberOfInputChannels);
-    outputBuffers.resize (numberOfOutputChannels);
+    inputBuffers.resize (numInputChannels);
+    outputBuffers.resize (numOutputChannels);
 
     if (jack_activate (client)) {
         throw std::runtime_error { "cannot activate client" };
@@ -188,37 +186,23 @@ int JackModule::_wrap_jack_process_cb (jack_nframes_t numFrames, void* self) {
 }
 
 int JackModule::onProcess (jack_nframes_t numFrames) {
-    for (auto channel = 0; channel < numberOfInputChannels; ++channel) {
+    for (auto channel = 0; channel < numInputChannels; ++channel) {
         inputBuffers[channel] = (SampleType*) jack_port_get_buffer (inputPorts[channel], numFrames);
     }
 
-    for (auto channel = 0; channel < numberOfOutputChannels; ++channel) {
+    for (auto channel = 0; channel < numOutputChannels; ++channel) {
         outputBuffers[channel] = (SampleType*) jack_port_get_buffer (outputPorts[channel], numFrames);
     }
 
-    // push input samples from JACK channel buffers to the input ringbuffer
-    // interleave the samples before writing them to the ringbuffer
-    for (auto frame = 0; frame < static_cast<int> (numFrames); ++frame) {
-        for (auto channel = 0; channel < numberOfInputChannels; ++channel) {
-            tempBuffer[frame * numberOfInputChannels + channel] = inputBuffers[channel][frame];
-        }
-    }
-
-    auto ptr = reinterpret_cast<SampleType*> (tempBuffer.data());
-
-    const auto framesPushed = inputRingBuffer.push (ptr, numFrames * numberOfInputChannels);
-    assert (framesPushed >= numFrames * numberOfInputChannels);
-
-    const auto framesPopped = outputRingBuffer.pop (tempBuffer.data(), numFrames * numberOfOutputChannels);
-    assert (framesPopped >= numFrames * numberOfOutputChannels);
-
-    // pop samples from output ringbuffer into JACK channel buffers
-    // de-interleave the samples from the ringbuffer and write them to the
-    // appropriate JACK output buffers
-    for (auto frame = 0; frame < static_cast<int> (numFrames); ++frame) {
-        for (auto channel = 0; channel < numberOfOutputChannels; ++channel) {
-            outputBuffers[channel][frame] = tempBuffer[frame * numberOfOutputChannels + channel];
-        }
+    if (callback != nullptr) {
+        const auto buffer = AudioBuffer {
+            .inputChannels = const_cast<const float**> (inputBuffers.data()),
+            .outputChannels = outputBuffers.data(),
+            .numOutputChannels = static_cast<int> (outputBuffers.size()),
+            .numInputChannels = static_cast<int> (inputBuffers.size()),
+            .numFrames = static_cast<int> (numFrames),
+        };
+        callback->process (buffer);
     }
 
     return 0;
@@ -231,76 +215,57 @@ inline int countPorts (const char** ports) {
     return numPorts;
 }
 
-void JackModule::autoConnect (std::string_view inputClient, std::string_view outputClient) {
-    if (numberOfInputChannels > 0) {
-        auto ports = std::unique_ptr<const char*, void (*) (const char**)> {
-            jack_get_ports (client, inputClient.data(), nullptr, JackPortIsOutput),
-            [] (auto** p) { free (p); }
-        };
+using UniquePortsPtr = std::unique_ptr<const char*, void (*) (const char**)>;
 
-        if (ports == nullptr) {
-            std::cout << "Cannot find capture ports associated with " << inputClient << ", trying 'system'." << std::endl;
-            ports.reset (jack_get_ports (client, "system", nullptr, JackPortIsOutput));
-            if (ports == nullptr) {
-                std::cout << "Cannot find system capture ports. Continuing without inputs." << std::endl;
-                // both attempts failed, continue without capture ports
-                numberOfInputChannels = 0;
-            }  // if fallback not found
-        }      // if specified not found
+inline auto makePortsPtr (const char** ports) -> UniquePortsPtr {
+    return {
+        ports,
+        [] (auto** p) { free (p); }
+    };
+}
 
-        // find out the number of (not-null) ports on the source client
-        const auto numInputPorts = countPorts (ports.get());
+inline auto findPorts (jack_client_t* client, std::string_view clientName, uint64_t flags) -> UniquePortsPtr {
+    if (auto ports = makePortsPtr (jack_get_ports (client, clientName.data(), nullptr, flags))) {
+        return ports;
+    }
 
-        std::cout << "Source client has " << numInputPorts << " ports" << std::endl;
+    if (auto ports = makePortsPtr (jack_get_ports (client, "system", nullptr, flags))) {
+        return ports;
+    }
 
-        auto inputPortIndex = 0;
-        for (int channel = 0; channel < numberOfInputChannels; channel++) {
-            std::cout << "connect input channel " << channel << std::endl;
-            if (jack_connect (client, ports.get()[inputPortIndex], jack_port_name (inputPorts[channel]))) {
-                std::cout << "Cannot connect input ports" << std::endl;
+    throw std::runtime_error {
+        "Cannot find capture ports associated with " + std::string { clientName } + ", or 'system'."
+    };
+}
+
+
+void JackModule::connectInput (std::string_view inputClient) {
+    if (numInputChannels > 0) {
+        auto ports = findPorts (client, inputClient, JackPortIsOutput);
+
+        assert (countPorts (ports.get()) == numInputChannels);
+
+        for (auto channel = 0; channel < numInputChannels; ++channel) {
+            if (jack_connect (client, ports.get()[channel], jack_port_name (inputPorts[channel]))) {
+                throw std::runtime_error { "Cannot connect input ports" };
             }
-            ++inputPortIndex;
-            if (numInputPorts > 0) inputPortIndex %= numInputPorts;
         }
     }
+}
 
-    /*
-   * Try to auto-connect our output to the input of another client, so we
-   * regard this as an output from our perspective
-   */
-    if (numberOfOutputChannels > 0) {
-        auto ports = jack_get_ports (client, outputClient.data(), nullptr, JackPortIsInput);
-        if (ports == nullptr) {
-            std::cout << "Cannot find output ports associated with " << outputClient << ", trying 'system'." << std::endl;
-            // try "system"
-            ports = jack_get_ports (client, "system", nullptr, JackPortIsInput);
-            if (ports == nullptr) {
-                std::cout << "Cannot find system output ports. Continuing without outputs." << std::endl;
-                // both attempts failed, continue without output port
-                numberOfOutputChannels = 0;
-            }  // if fallback not found
-        }      // if specified not found
+void JackModule::connectOutput (std::string_view outputClient) {
+    if (numOutputChannels > 0) {
+        auto ports = findPorts (client, outputClient.data(), JackPortIsInput);
 
-        // find out the number of (not-null) ports on the sink client
-        int nrofoutputports = 0;
-        while (ports[nrofoutputports])
-            ++nrofoutputports;
-        std::cout << "Sink client has " << nrofoutputports << " ports " << std::endl;
+        assert (countPorts (ports.get()) == numOutputChannels);
 
-        int outputportindex = 0;
-        for (int channel = 0; channel < numberOfOutputChannels; channel++) {
-            std::cout << "connect output channel " << channel << std::endl;
-            if (jack_connect (client, jack_port_name (outputPorts[outputportindex]), ports[channel])) {
-                std::cout << "Cannot connect output ports" << std::endl;
+        for (auto channel = 0; channel < numOutputChannels; ++channel) {
+            if (jack_connect (client, jack_port_name (outputPorts[channel]), ports.get()[channel])) {
+                throw std::runtime_error { "Cannot connect output ports" };
             }
-            ++outputportindex;
-            if (nrofoutputports > 0) outputportindex %= nrofoutputports;
-        }  // for channel
-
-        free (ports);  // ports structure no longer needed
+        }
     }
-
-}  // autoconnect() <- end of functie (autoconnect functie) [end]
+}
 
 
 static void jack_shutdown ([[maybe_unused]] void* arg) {
