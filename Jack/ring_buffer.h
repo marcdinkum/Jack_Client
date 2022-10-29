@@ -104,8 +104,6 @@ private:
     std::atomic<uint64_t> writeIndex { 0 };
     std::atomic<uint64_t> readIndex { 0 };
 
-    static constexpr uint64_t itemSize { sizeof (FloatType) };
-
     bool blockingPush { false };
     bool blockingPop { false };
 
