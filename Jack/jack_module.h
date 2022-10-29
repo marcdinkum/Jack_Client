@@ -181,7 +181,7 @@ void JackModule::init (std::string_view clientName) {
 
 
 int JackModule::_wrap_jack_process_cb (jack_nframes_t numFrames, void* self) {
-    return ((JackModule*) self)->onProcess (numFrames);
+    return (reinterpret_cast<JackModule*> (self))->onProcess (numFrames);
 }
 
 int JackModule::onProcess (jack_nframes_t numFrames) {
