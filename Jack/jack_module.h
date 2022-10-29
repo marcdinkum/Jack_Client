@@ -186,11 +186,11 @@ int JackModule::_wrap_jack_process_cb (jack_nframes_t numFrames, void* self) {
 
 int JackModule::onProcess (jack_nframes_t numFrames) {
     for (auto channel = 0; channel < numInputChannels; ++channel) {
-        inputBuffers[channel] = (SampleType*) jack_port_get_buffer (inputPorts[channel], numFrames);
+        inputBuffers[channel] = reinterpret_cast<SampleType*> (jack_port_get_buffer (inputPorts[channel], numFrames));
     }
 
     for (auto channel = 0; channel < numOutputChannels; ++channel) {
-        outputBuffers[channel] = (SampleType*) jack_port_get_buffer (outputPorts[channel], numFrames);
+        outputBuffers[channel] = reinterpret_cast<SampleType*> (jack_port_get_buffer (outputPorts[channel], numFrames));
     }
 
     if (callback != nullptr) {
