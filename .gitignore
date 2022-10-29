@@ -3,6 +3,7 @@
 /.idea
 /build
 /consolePrototypes/juce_audio_backend
+app
 
 #cmake
 CMakeLists.txt.user
