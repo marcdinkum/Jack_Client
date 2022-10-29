@@ -29,7 +29,7 @@
  *                  Daan Schrier
  *  E-mails       : marc.groenewegen@hku.nl,
  *                  wouter.ensink@student.hku.nl,
- *                  Daan@Daansdotorg.wordpress.com
+ *                  daan.schrier@student.hku.nl
  *
  **********************************************************************/
 
@@ -40,6 +40,7 @@
 #include <array>
 #include <iostream>
 #include <jack/jack.h>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -55,8 +56,18 @@ public:
     JackModule (uint64_t inputBufSize, uint64_t outputBufSize);
     ~JackModule();
 
-    void setNumInputChannels (int n);
-    void setNumOutputChannels (int n);
+    void setNumInputChannels (int n) {
+        if (n > MAX_INPUT_CHANNELS || n < 0) {
+            throw std::runtime_error { "invalid number of input channels" };
+        }
+        numberOfInputChannels = n;
+    }
+    void setNumOutputChannels (int n) {
+        if (n > MAX_OUTPUT_CHANNELS || n < 0) {
+            throw std::runtime_error { "invalid number of output channels" };
+        }
+        numberOfOutputChannels = n;
+    }
     void init();
     void init (std::string_view clientName);
 
@@ -70,15 +81,15 @@ public:
 
     void autoConnect (std::string_view inputClient, std::string_view outputClient);
 
-    uint64_t readSamples (float* target, uint64_t numSamples) {
+    uint64_t readSamples (SampleType* target, uint64_t numSamples) {
         return inputRingBuffer.pop (target, numSamples);
     }
 
-    uint64_t writeSamples (float* source, uint64_t numSamples) {
+    uint64_t writeSamples (SampleType* source, uint64_t numSamples) {
         return outputRingBuffer.pop (source, numSamples);
     }
 
-    void end(){
+    void end() {
         jack_deactivate (client);
 
         for (auto port : inputPorts)
@@ -193,10 +204,12 @@ int JackModule::onProcess (jack_nframes_t numFrames) {
         }
     }
 
-    const auto framesPushed = inputRingBuffer.push ((SampleType*) tempBuffer, numFrames * numberOfInputChannels);
+    auto ptr = reinterpret_cast<SampleType*> (tempBuffer.data());
+
+    const auto framesPushed = inputRingBuffer.push (ptr, numFrames * numberOfInputChannels);
     assert (framesPushed >= numFrames * numberOfInputChannels);
 
-    const auto framesPopped = outputRingBuffer.pop ((SampleType*) tempbuffer, numFrames * numberOfOutputChannels);
+    const auto framesPopped = outputRingBuffer.pop (tempBuffer.data(), numFrames * numberOfOutputChannels);
     assert (framesPopped >= numFrames * numberOfOutputChannels);
 
     // pop samples from output ringbuffer into JACK channel buffers
@@ -211,33 +224,23 @@ int JackModule::onProcess (jack_nframes_t numFrames) {
     return 0;
 }
 
-
-void JackModule::setNumInputChannels (int n) {
-    if (n > MAX_INPUT_CHANNELS || n < 0) {
-        throw std::runtime_error { "invalid number of input channels" };
-    }
-    numberOfInputChannels = n;
+inline int countPorts (const char** ports) {
+    auto numPorts = 0;
+    while (ports[numPorts])
+        ++numPorts;
+    return numPorts;
 }
-
-
-void JackModule::setNumOutputChannels (int n) {
-    if (n > MAX_OUTPUT_CHANNELS || n < 0) {
-        throw std::runtime_error { "invalid number of output channels" };
-    }
-    numberOfOutputChannels = n;
-}
-
 
 void JackModule::autoConnect (std::string_view inputClient, std::string_view outputClient) {
     if (numberOfInputChannels > 0) {
-        auto ports = std::unique_ptr {
+        auto ports = std::unique_ptr<const char*, void (*) (const char**)> {
             jack_get_ports (client, inputClient.data(), nullptr, JackPortIsOutput),
-            [] (jack_port_t* p) { free (p); }
+            [] (auto** p) { free (p); }
         };
 
         if (ports == nullptr) {
             std::cout << "Cannot find capture ports associated with " << inputClient << ", trying 'system'." << std::endl;
-            ports = jack_get_ports (client, "system", nullptr, JackPortIsOutput);
+            ports.reset (jack_get_ports (client, "system", nullptr, JackPortIsOutput));
             if (ports == nullptr) {
                 std::cout << "Cannot find system capture ports. Continuing without inputs." << std::endl;
                 // both attempts failed, continue without capture ports
@@ -246,15 +249,14 @@ void JackModule::autoConnect (std::string_view inputClient, std::string_view out
         }      // if specified not found
 
         // find out the number of (not-null) ports on the source client
-        auto numInputPorts = 0;
-        while (ports[numInputPorts])
-            ++numInputPorts;
+        const auto numInputPorts = countPorts (ports.get());
+
         std::cout << "Source client has " << numInputPorts << " ports" << std::endl;
 
         auto inputPortIndex = 0;
         for (int channel = 0; channel < numberOfInputChannels; channel++) {
             std::cout << "connect input channel " << channel << std::endl;
-            if (jack_connect (client, ports[inputPortIndex], jack_port_name (input_port[channel]))) {
+            if (jack_connect (client, ports.get()[inputPortIndex], jack_port_name (inputPorts[channel]))) {
                 std::cout << "Cannot connect input ports" << std::endl;
             }
             ++inputPortIndex;
@@ -267,7 +269,7 @@ void JackModule::autoConnect (std::string_view inputClient, std::string_view out
    * regard this as an output from our perspective
    */
     if (numberOfOutputChannels > 0) {
-        ports = jack_get_ports (client, outputClient.data(), nullptr, JackPortIsInput);
+        auto ports = jack_get_ports (client, outputClient.data(), nullptr, JackPortIsInput);
         if (ports == nullptr) {
             std::cout << "Cannot find output ports associated with " << outputClient << ", trying 'system'." << std::endl;
             // try "system"
@@ -288,7 +290,7 @@ void JackModule::autoConnect (std::string_view inputClient, std::string_view out
         int outputportindex = 0;
         for (int channel = 0; channel < numberOfOutputChannels; channel++) {
             std::cout << "connect output channel " << channel << std::endl;
-            if (jack_connect (client, jack_port_name (output_port[outputportindex]), ports[channel])) {
+            if (jack_connect (client, jack_port_name (outputPorts[outputportindex]), ports[channel])) {
                 std::cout << "Cannot connect output ports" << std::endl;
             }
             ++outputportindex;
@@ -299,12 +301,6 @@ void JackModule::autoConnect (std::string_view inputClient, std::string_view out
     }
 
 }  // autoconnect() <- end of functie (autoconnect functie) [end]
-
-
-void JackModule::end() {
-
-}
-
 
 
 static void jack_shutdown ([[maybe_unused]] void* arg) {
