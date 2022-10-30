@@ -3,26 +3,25 @@
 //
 
 #include "jack_module.h"
-#include "sine.h"
+#include "tremolo.h"
 
 struct Callback : public AudioCallback {
     void prepare (uint64_t sampleRate) override {
-        sine.prepareToPlay ((double) sampleRate);
-        sine.setDelta (50);
+        for(auto & tremolo : tremolos)
+            tremolo.prepareToPlay(static_cast<double>(sampleRate));
     }
 
     void process (AudioBuffer buffer) noexcept override {
         auto [inputChannels, outputChannels, numInputChannels, numOutputChannels, numFrames] = buffer;
 
-        for (auto sample = 0u; sample < numFrames; ++sample) {
-            const auto sineSample = sine.output() * 0.01;
-            for (auto channel = 0u; channel < numOutputChannels; ++channel) {
-                outputChannels[channel][sample] = sineSample;
+        for (auto channel = 0u; channel < numOutputChannels; ++channel) {
+            for (auto sample = 0u; sample < numFrames; ++sample) {
+                outputChannels[channel][sample] = tremolos[channel].output(inputChannels[channel][sample]);
             }
         }
     }
 
-    Sine sine;
+    std::array<Tremolo, 2> tremolos;
 };
 
 
@@ -33,7 +32,7 @@ int main() {
 
     auto callback = Callback {};
 
-    jack_module.setNumInputChannels (4);
+    jack_module.setNumInputChannels (2); // <-
     jack_module.setNumOutputChannels (2);
 
     jack_module.init();

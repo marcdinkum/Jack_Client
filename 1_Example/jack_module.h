@@ -140,6 +140,37 @@ private:
     jack_client_t* client;
     static constexpr auto MAX_INPUT_CHANNELS = 4;
     static constexpr auto MAX_OUTPUT_CHANNELS = 2;
+
+
+    static int countPorts (const char** ports) {
+        auto numPorts = 0;
+        while (ports[numPorts])
+            ++numPorts;
+        return numPorts;
+    }
+
+    using UniquePortsPtr = std::unique_ptr<const char*, void (*) (const char**)>;
+
+    static auto makePortsPtr (const char** ports) -> UniquePortsPtr {
+        return {
+            ports,
+            [] (auto** p) { free (p); }
+        };
+    }
+
+    auto findPorts (std::string_view clientName, uint64_t flags) -> UniquePortsPtr {
+        if (auto ports = makePortsPtr (jack_get_ports (client, clientName.data(), nullptr, flags))) {
+            return ports;
+        }
+
+        if (auto ports = makePortsPtr (jack_get_ports (client, "system", nullptr, flags))) {
+            return ports;
+        }
+
+        throw std::runtime_error {
+            "Cannot find capture ports associated with " + std::string { clientName } + ", or 'system'."
+        };
+    }
 };
 
 
@@ -147,7 +178,7 @@ private:
 static void jack_shutdown (void*);
 
 
-void JackModule::init (std::string_view clientName) {
+void JackModule::init (std::string_view clientName, int numInputs, int numOutputs) {
     client = jack_client_open (clientName.data(), JackNoStartServer, nullptr);
 
     if (client == nullptr) {
@@ -207,40 +238,10 @@ int JackModule::onProcess (jack_nframes_t numFrames) {
     return 0;
 }
 
-inline int countPorts (const char** ports) {
-    auto numPorts = 0;
-    while (ports[numPorts])
-        ++numPorts;
-    return numPorts;
-}
-
-using UniquePortsPtr = std::unique_ptr<const char*, void (*) (const char**)>;
-
-inline auto makePortsPtr (const char** ports) -> UniquePortsPtr {
-    return {
-        ports,
-        [] (auto** p) { free (p); }
-    };
-}
-
-inline auto findPorts (jack_client_t* client, std::string_view clientName, uint64_t flags) -> UniquePortsPtr {
-    if (auto ports = makePortsPtr (jack_get_ports (client, clientName.data(), nullptr, flags))) {
-        return ports;
-    }
-
-    if (auto ports = makePortsPtr (jack_get_ports (client, "system", nullptr, flags))) {
-        return ports;
-    }
-
-    throw std::runtime_error {
-        "Cannot find capture ports associated with " + std::string { clientName } + ", or 'system'."
-    };
-}
-
 
 void JackModule::connectInput (std::string_view inputClient) {
     if (numInputChannels > 0) {
-        auto ports = findPorts (client, inputClient, JackPortIsOutput);
+        auto ports = findPorts (inputClient, JackPortIsOutput);
 
         assert (countPorts (ports.get()) == numInputChannels);
 
@@ -254,7 +255,7 @@ void JackModule::connectInput (std::string_view inputClient) {
 
 void JackModule::connectOutput (std::string_view outputClient) {
     if (numOutputChannels > 0) {
-        auto ports = findPorts (client, outputClient.data(), JackPortIsInput);
+        auto ports = findPorts (outputClient.data(), JackPortIsInput);
 
         assert (countPorts (ports.get()) == numOutputChannels);
 
