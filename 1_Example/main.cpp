@@ -1,14 +1,11 @@
-//
-// Created by Dean on 29/10/2022.
-//
 
 #include "jack_module.h"
 #include "tremolo.h"
 
 struct Callback : public AudioCallback {
     void prepare (uint64_t sampleRate) override {
-        for(auto & tremolo : tremolos)
-            tremolo.prepareToPlay(static_cast<double>(sampleRate));
+        for (auto& tremolo : tremolos)
+            tremolo.prepareToPlay (static_cast<double> (sampleRate));
     }
 
     void process (AudioBuffer buffer) noexcept override {
@@ -16,7 +13,7 @@ struct Callback : public AudioCallback {
 
         for (auto channel = 0u; channel < numOutputChannels; ++channel) {
             for (auto sample = 0u; sample < numFrames; ++sample) {
-                outputChannels[channel][sample] = tremolos[channel].output(inputChannels[channel][sample]);
+                outputChannels[channel][sample] = tremolos[channel].output (inputChannels[0][sample]);
             }
         }
     }
@@ -28,16 +25,10 @@ struct Callback : public AudioCallback {
 int main() {
     // Your code goes here!
 
-    auto jack_module = JackModule();
-
     auto callback = Callback {};
+    auto jack_module = JackModule (callback);
 
-    jack_module.setNumInputChannels (2); // <-
-    jack_module.setNumOutputChannels (2);
-
-    jack_module.init();
-    jack_module.autoConnect();
-    jack_module.setAudioCallback (callback);
+    jack_module.init (2, 2);
 
 
     auto running = true;
