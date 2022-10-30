@@ -1,6 +1,8 @@
 
 #include "jack_module.h"
 #include "tremolo.h"
+#include <array>
+#include <iostream>
 
 struct Callback : public AudioCallback {
     void prepare (uint64_t sampleRate) override {
