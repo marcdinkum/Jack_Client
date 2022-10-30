@@ -181,7 +181,7 @@ private:
         }
 
         throw std::runtime_error {
-            "Cannot find capture ports associated with " + std::string { clientName };
+            "Cannot find capture ports associated with " + std::string { clientName }
         };
     }
 
