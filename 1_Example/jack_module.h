@@ -54,7 +54,7 @@ struct AudioBuffer {
 class AudioCallback {
 public:
     virtual void prepare (uint64_t sampleRate) {}
-    virtual void process (AudioBuffer buffer) noexcept {}
+    virtual void process (AudioBuffer buffer) {}
 };
 
 class JackModule {
@@ -181,7 +181,7 @@ private:
         }
 
         throw std::runtime_error {
-            "Cannot find capture ports associated with " + std::string { clientName } + "."
+            "Cannot find capture ports associated with " + std::string { clientName };
         };
     }
 
@@ -203,9 +203,9 @@ private:
         if (numInputChannels > 0) {
             auto ports = findPorts (inputClient.data(), JackPortIsOutput);
 
-            // When you hit this assert, it means you want more inputs than are available in Jack.
-            // Please consider lowering the number of input channels you want.
-            assert (countPorts (ports.get()) >= numInputChannels);
+            if (countPorts (ports.get()) < numInputChannels) {
+                throw std::runtime_error { "Not enough Jack ports for the number of requested input channels" };
+            }
 
             for (auto channel = 0; channel < numInputChannels; ++channel) {
                 if (jack_connect (client, ports.get()[channel], jack_port_name (inputPorts[channel]))) {
@@ -219,9 +219,9 @@ private:
         if (numOutputChannels > 0) {
             auto ports = findPorts (outputClient.data(), JackPortIsInput);
 
-            // When you hit this assert, it means you want more outputs than are available in Jack.
-            // Please consider lowering the number of output channels you want.
-            assert (countPorts (ports.get()) >= numOutputChannels);
+            if (countPorts (ports.get()) < numOutputChannels) {
+                throw std::runtime_error { "Not enough Jack ports for the number of requested output channels" };
+            }
 
             for (auto channel = 0; channel < numOutputChannels; ++channel) {
                 if (jack_connect (client, jack_port_name (outputPorts[channel]), ports.get()[channel])) {
