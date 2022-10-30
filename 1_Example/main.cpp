@@ -10,7 +10,7 @@ struct Callback : public AudioCallback {
             tremolo.prepareToPlay (static_cast<double> (sampleRate));
     }
 
-    void process (AudioBuffer buffer) noexcept override {
+    void process (AudioBuffer buffer) override {
         auto [inputChannels, outputChannels, numInputChannels, numOutputChannels, numFrames] = buffer;
 
         for (auto channel = 0u; channel < numOutputChannels; ++channel) {
