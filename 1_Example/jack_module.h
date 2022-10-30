@@ -234,10 +234,10 @@ private:
     void end() {
         jack_deactivate (client);
 
-        for (auto port : inputPorts)
+        for (auto* port : inputPorts)
             jack_port_disconnect (client, port);
 
-        for (auto port : outputPorts)
+        for (auto* port : outputPorts)
             jack_port_disconnect (client, port);
     }
 
