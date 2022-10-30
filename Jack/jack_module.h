@@ -36,8 +36,6 @@
 
 #pragma once
 
-#include <array>
-#include <iostream>
 #include <jack/jack.h>
 #include <memory>
 #include <string>
@@ -61,7 +59,7 @@ public:
 
 class JackModule {
 public:
-   JackModule (AudioCallback& audioCallback) : callback (audioCallback) {}
+   explicit JackModule (AudioCallback& audioCallback) : callback (audioCallback) {}
 
    ~JackModule() {
        end();
@@ -121,7 +119,6 @@ public:
        return jack_get_sample_rate (client);
    }
 
-
 private:
    using SampleType = jack_default_audio_sample_t;
    using UniquePortsPtr = std::unique_ptr<const char*, void (*) (const char**)>;
@@ -171,7 +168,6 @@ private:
        return numPorts;
    }
 
-
    static auto makePortsPtr (const char** ports) -> UniquePortsPtr {
        return {
            ports,
@@ -203,16 +199,13 @@ private:
        numOutputChannels = n;
    }
 
-   void autoConnect() {
-       connectInput ("system");
-       connectOutput ("system");
-   }
-
    void connectInput (std::string_view inputClient) {
        if (numInputChannels > 0) {
            auto ports = findPorts (inputClient.data(), JackPortIsOutput);
 
-           assert (countPorts (ports.get()) == numInputChannels);
+           // When you hit this assert, it means you want more inputs than are available in Jack.
+           // Please consider lowering the number of input channels you want.
+           assert (countPorts (ports.get()) >= numInputChannels);
 
            for (auto channel = 0; channel < numInputChannels; ++channel) {
                if (jack_connect (client, ports.get()[channel], jack_port_name (inputPorts[channel]))) {
@@ -221,11 +214,14 @@ private:
            }
        }
    }
+
    void connectOutput (std::string_view outputClient) {
        if (numOutputChannels > 0) {
            auto ports = findPorts (outputClient.data(), JackPortIsInput);
 
-           assert (countPorts (ports.get()) == numOutputChannels);
+           // When you hit this assert, it means you want more outputs than are available in Jack.
+           // Please consider lowering the number of output channels you want.
+           assert (countPorts (ports.get()) >= numOutputChannels);
 
            for (auto channel = 0; channel < numOutputChannels; ++channel) {
                if (jack_connect (client, jack_port_name (outputPorts[channel]), ports.get()[channel])) {
