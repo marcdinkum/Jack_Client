@@ -52,7 +52,7 @@ public:
 
         auto sum = 0.0f;
         for (int i = 0; i < batchSize; ++i) {
-            const auto sample = sampleHistory.peekBeforeWriteHead (i);
+            const auto sample = amplitudeToDecibels (sampleHistory.peekBeforeWriteHead (i));
             sum += sample * sample;
         }
 
@@ -68,6 +68,15 @@ private:
     SampleHistory sampleHistory;
     int batchSize;
     std::atomic<float> currentValue;
+
+    static float amplitudeToDecibels (float gain) {
+        constexpr float MINUS_INFINITY_DB = -100.0;
+        if (std::abs (gain) > 0.0) {
+            return std::max (MINUS_INFINITY_DB, std::log (std::abs (gain)) * 20.0f);
+        } else {
+            return MINUS_INFINITY_DB;
+        }
+    }
 };
 
 // ================================================================================
@@ -101,7 +110,7 @@ private:
     jackModule.init (2, 2);
 
     while (true) {
-        std::cout << "rms: " << analyzer.getCurrentValue() << "\n";
+        std::cout << "rms: " << analyzer.getCurrentValue() << "db\n";
         std::this_thread::sleep_for (std::chrono::seconds { 1 });
     }
 }
