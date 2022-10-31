@@ -53,7 +53,7 @@ struct AudioBuffer {
 
 class AudioCallback {
 public:
-    virtual void prepare (uint64_t sampleRate) {}
+    virtual void prepare (int sampleRate) {}
     virtual void process (AudioBuffer buffer) {}
 };
 
@@ -79,44 +79,25 @@ public:
                std::string_view outputClient = "system") {
         setNumInputChannels (numInputs);
         setNumOutputChannels (numOutputs);
-        client = jack_client_open (clientName.data(), JackNoStartServer, nullptr);
 
-        if (client == nullptr) {
-            throw std::runtime_error { "JACK server not running" };
-        }
+        openJackClient (clientName);
+        registerJackCallbacks();
 
-        jack_on_shutdown (client, jack_shutdown, nullptr);
-        jack_set_process_callback (client, _wrap_jack_process_cb, this);
+        registerInputPorts();
+        registerOutputPorts();
 
-        inputPorts.clear();
-        for (auto channel = 0; channel < numInputChannels; ++channel) {
-            const auto name = "input_" + std::to_string (channel + 1);
-            const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
-            inputPorts.push_back (port);
-        }
+        allocateBuffers();
 
-        outputPorts.clear();
-        for (auto channel = 0; channel < numOutputChannels; ++channel) {
-            const auto name = "output_" + std::to_string (channel + 1);
-            const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
-            outputPorts.push_back (port);
-        }
+        activateJackClient();
 
-        inputBuffers.resize (numInputChannels);
-        outputBuffers.resize (numOutputChannels);
+        connectInputs (inputClient);
+        connectOutputs (outputClient);
 
-        if (jack_activate (client)) {
-            throw std::runtime_error { "Cannot activate client" };
-        }
-
-        connectInput (inputClient);
-        connectOutput (outputClient);
-
-        callback.prepare (getSampleRate());
+        prepareCallback();
     }
 
-    [[nodiscard]] uint64_t getSampleRate() const {
-        return jack_get_sample_rate (client);
+    int getSampleRate() const {
+        return static_cast<int> (jack_get_sample_rate (client));
     }
 
 private:
@@ -136,7 +117,7 @@ private:
     static constexpr auto MAX_INPUT_CHANNELS = 2;
     static constexpr auto MAX_OUTPUT_CHANNELS = 2;
 
-    static int _wrap_jack_process_cb (jack_nframes_t numFrames, void* self) {
+    static int jackProcessCallback (jack_nframes_t numFrames, void* self) {
         return (reinterpret_cast<JackModule*> (self))->onProcess (numFrames);
     }
 
@@ -159,6 +140,12 @@ private:
         callback.process (buffer);
 
         return 0;
+    }
+
+    void activateJackClient() const {
+        if (jack_activate (client)) {
+            throw std::runtime_error { "Cannot activate client" };
+        }
     }
 
     static int countPorts (const char** ports) {
@@ -199,7 +186,7 @@ private:
         numOutputChannels = n;
     }
 
-    void connectInput (std::string_view inputClient) {
+    void connectInputs (std::string_view inputClient) {
         if (numInputChannels > 0) {
             auto ports = findPorts (inputClient.data(), JackPortIsOutput);
 
@@ -215,7 +202,7 @@ private:
         }
     }
 
-    void connectOutput (std::string_view outputClient) {
+    void connectOutputs (std::string_view outputClient) {
         if (numOutputChannels > 0) {
             auto ports = findPorts (outputClient.data(), JackPortIsInput);
 
@@ -231,6 +218,46 @@ private:
         }
     }
 
+    void registerInputPorts() {
+        inputPorts.clear();
+        for (auto channel = 0; channel < numInputChannels; ++channel) {
+            const auto name = "input_" + std::to_string (channel + 1);
+            const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+            inputPorts.push_back (port);
+        }
+    }
+
+    void registerOutputPorts() {
+        outputPorts.clear();
+        for (auto channel = 0; channel < numOutputChannels; ++channel) {
+            const auto name = "output_" + std::to_string (channel + 1);
+            const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+            outputPorts.push_back (port);
+        }
+    }
+
+    void openJackClient (std::string_view clientName) {
+        client = jack_client_open (clientName.data(), JackNoStartServer, nullptr);
+
+        if (client == nullptr) {
+            throw std::runtime_error { "JACK server not running" };
+        }
+    }
+
+    void registerJackCallbacks() const {
+        jack_on_shutdown (client, onJackShutdown, nullptr);
+        jack_set_process_callback (client, jackProcessCallback, (void*) this);
+    }
+
+    void allocateBuffers() {
+        inputBuffers.resize (numInputChannels);
+        outputBuffers.resize (numOutputChannels);
+    }
+
+    void prepareCallback() {
+        callback.prepare (getSampleRate());
+    }
+
     void end() {
         jack_deactivate (client);
 
@@ -241,7 +268,7 @@ private:
             jack_port_disconnect (client, port);
     }
 
-    static void jack_shutdown ([[maybe_unused]] void* arg) {
+    static void onJackShutdown (void*) {
         exit (1);
     }
 };
