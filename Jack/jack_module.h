@@ -67,14 +67,7 @@ public:
 
    void init (int numInputs,
               int numOutputs,
-              std::string_view inputClient = "system",
-              std::string_view outputClient = "system") {
-       init ("JackModule", numInputs, numOutputs, inputClient, outputClient);
-   }
-
-   void init (std::string_view clientName,
-              int numInputs,
-              int numOutputs,
+              std::string_view clientName = "JackModule",
               std::string_view inputClient = "system",
               std::string_view outputClient = "system") {
        setNumInputChannels (numInputs);
