@@ -188,7 +188,7 @@ private:
 
    void connectInputs (std::string_view inputClient) {
        if (numInputChannels > 0) {
-           auto ports = findPorts (inputClient.data(), JackPortIsOutput);
+           auto ports = findPorts (inputClient, JackPortIsOutput);
 
            if (countPorts (ports.get()) < numInputChannels) {
                throw std::runtime_error { "Not enough Jack ports for the number of requested input channels" };
@@ -204,7 +204,7 @@ private:
 
    void connectOutputs (std::string_view outputClient) {
        if (numOutputChannels > 0) {
-           auto ports = findPorts (outputClient.data(), JackPortIsInput);
+           auto ports = findPorts (outputClient, JackPortIsInput);
 
            if (countPorts (ports.get()) < numOutputChannels) {
                throw std::runtime_error { "Not enough Jack ports for the number of requested output channels" };
