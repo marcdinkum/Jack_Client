@@ -38,6 +38,7 @@
 
 #include <jack/jack.h>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unistd.h>
