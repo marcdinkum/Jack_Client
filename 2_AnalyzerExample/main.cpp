@@ -55,7 +55,7 @@ public:
             const auto sample = sampleHistory.peekBeforeWriteHead (i);
             sum += sample * sample;
         }
-        const auto rms = amplitudeToDecibels(std::sqrt (sum / (float) batchSize));
+        const auto rms = amplitudeToDecibels (std::sqrt (sum / (float) batchSize));
         currentValue.store (rms);
     }
 
