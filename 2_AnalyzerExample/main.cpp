@@ -51,7 +51,7 @@ public:
         sampleHistory.write (input);
 
         auto sum = 0.0f;
-        for (int i = 0; i < batchSize; ++i) {
+        for (auto i = 0; i < batchSize; ++i) {
             const auto sample = sampleHistory.lookBack (i);
             sum += sample * sample;
         }
