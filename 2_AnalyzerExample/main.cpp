@@ -9,8 +9,8 @@
 
 class SampleHistory {
 public:
-    void setSize (const int64_t newSize) {
-        buffer.resize (newSize, 0.0);
+    void setSize (const int size) {
+        buffer.resize (size, 0.0);
     }
 
     void write (const float sample) {
@@ -18,8 +18,8 @@ public:
         writePosition = getPositionAfter (writePosition);
     }
 
-    float peekBeforeWriteHead (int numSamplesBeforeWriteHead) const {
-        return buffer[subtractFromPosition (writePosition, numSamplesBeforeWriteHead)];
+    float lookBack (int numSamples) const {
+        return buffer[subtractFromPosition (writePosition, numSamples)];
     }
 
 private:
@@ -51,8 +51,8 @@ public:
         sampleHistory.write (input);
 
         auto sum = 0.0f;
-        for (int i = 0; i < batchSize; ++i) {
-            const auto sample = amplitudeToDecibels (sampleHistory.peekBeforeWriteHead (i));
+        for (auto i = 0; i < batchSize; ++i) {
+            const auto sample = amplitudeToDecibels (sampleHistory.lookBack (i));
             sum += sample * sample;
         }
 
@@ -70,7 +70,7 @@ private:
     std::atomic<float> currentValue;
 
     static float amplitudeToDecibels (float gain) {
-        constexpr float MINUS_INFINITY_DB = -100.0;
+        constexpr auto MINUS_INFINITY_DB = -100.0f;
         if (std::abs (gain) > 0.0) {
             return std::max (MINUS_INFINITY_DB, std::log (std::abs (gain)) * 20.0f);
         } else {
@@ -83,10 +83,10 @@ private:
 
 class Callback : public AudioCallback {
 public:
-    explicit Callback (RMSAnalyzer& analyzer) : analyzer (analyzer) {}
+    Callback (RMSAnalyzer& analyzer) : analyzer (analyzer) {}
 
     void process (AudioBuffer buffer) override {
-        for (int sample = 0; sample < buffer.numFrames; ++sample) {
+        for (auto sample = 0; sample < buffer.numFrames; ++sample) {
             const auto inputSample = buffer.inputChannels[0][sample];
             analyzer.analyze (inputSample);
 
@@ -102,7 +102,7 @@ private:
 
 // ================================================================================
 
-[[noreturn]] int main() {
+int main() {
     auto analyzer = RMSAnalyzer { 256 };
     auto callback = Callback { analyzer };
     auto jackModule = JackModule { callback };
