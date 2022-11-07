@@ -52,11 +52,10 @@ public:
 
         auto sum = 0.0f;
         for (int i = 0; i < batchSize; ++i) {
-            const auto sample = amplitudeToDecibels (sampleHistory.peekBeforeWriteHead (i));
+            const auto sample = sampleHistory.peekBeforeWriteHead (i);
             sum += sample * sample;
         }
-
-        const auto rms = std::sqrt (sum / (float) batchSize);
+        const auto rms = amplitudeToDecibels(std::sqrt (sum / (float) batchSize));
         currentValue.store (rms);
     }
 
@@ -72,7 +71,7 @@ private:
     static float amplitudeToDecibels (float gain) {
         constexpr float MINUS_INFINITY_DB = -100.0;
         if (std::abs (gain) > 0.0) {
-            return std::max (MINUS_INFINITY_DB, std::log (std::abs (gain)) * 20.0f);
+            return std::max (MINUS_INFINITY_DB, std::log10 (std::abs (gain)) * 20.0f);
         } else {
             return MINUS_INFINITY_DB;
         }
