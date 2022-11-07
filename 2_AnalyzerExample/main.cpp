@@ -51,12 +51,12 @@ public:
         sampleHistory.write (input);
 
         auto sum = 0.0f;
-        for (auto i = 0; i < batchSize; ++i) {
-            const auto sample = amplitudeToDecibels (sampleHistory.lookBack (i));
+        for (int i = 0; i < batchSize; ++i) {
+            const auto sample = sampleHistory.lookBack (i);
             sum += sample * sample;
         }
 
-        const auto rms = std::sqrt (sum / (float) batchSize);
+        const auto rms = amplitudeToDecibels (std::sqrt (sum / (float) batchSize));
         currentValue.store (rms);
     }
 
@@ -70,9 +70,9 @@ private:
     std::atomic<float> currentValue;
 
     static float amplitudeToDecibels (float gain) {
-        constexpr auto MINUS_INFINITY_DB = -100.0f;
+        constexpr float MINUS_INFINITY_DB = -100.0;
         if (std::abs (gain) > 0.0) {
-            return std::max (MINUS_INFINITY_DB, std::log (std::abs (gain)) * 20.0f);
+            return std::max (MINUS_INFINITY_DB, std::log10 (std::abs (gain)) * 20.0f);
         } else {
             return MINUS_INFINITY_DB;
         }
