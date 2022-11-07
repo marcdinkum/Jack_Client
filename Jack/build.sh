@@ -1,1 +1,0 @@
-clang++ jack_sine_test.cpp -o app -ljack --std=c++20
