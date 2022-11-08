@@ -41,6 +41,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unistd.h>
 #include <vector>
 
@@ -76,7 +77,7 @@ public:
         end();
     }
 
-    /// Call init() and pass the number of inputs and outputs. If no other arguments are passed the defaults
+    /// Call `init()` and pass the number of inputs and outputs. If no other arguments are passed the defaults
     /// mentioned below will be passed automatically. It is possible to manually enter arguments for `clientName`
     /// `inputClient` and `outputClient`.
     void init (int numInputs,
@@ -109,16 +110,18 @@ public:
     }
 
 private:
-    using SampleType = jack_default_audio_sample_t;
     using UniquePortsPtr = std::unique_ptr<const char*, void (*) (const char**)>;
+
+    static_assert (std::is_same_v<jack_default_audio_sample_t, float>,
+                   "this code assumes the jack audio sample type to be float, which is not the case if this assert fails");
 
     AudioCallback& callback;
     jack_client_t* client = nullptr;
 
     std::vector<jack_port_t*> inputPorts;
     std::vector<jack_port_t*> outputPorts;
-    std::vector<SampleType*> inputBuffers;
-    std::vector<SampleType*> outputBuffers;
+    std::vector<float*> inputBuffers;
+    std::vector<float*> outputBuffers;
 
     int numInputChannels = 2;
     int numOutputChannels = 2;
@@ -131,11 +134,11 @@ private:
 
     int onProcess (jack_nframes_t numFrames) {
         for (auto channel = 0; channel < numInputChannels; ++channel) {
-            inputBuffers[channel] = reinterpret_cast<SampleType*> (jack_port_get_buffer (inputPorts[channel], numFrames));
+            inputBuffers[channel] = reinterpret_cast<float*> (jack_port_get_buffer (inputPorts[channel], numFrames));
         }
 
         for (auto channel = 0; channel < numOutputChannels; ++channel) {
-            outputBuffers[channel] = reinterpret_cast<SampleType*> (jack_port_get_buffer (outputPorts[channel], numFrames));
+            outputBuffers[channel] = reinterpret_cast<float*> (jack_port_get_buffer (outputPorts[channel], numFrames));
         }
 
         const auto buffer = AudioBuffer {
