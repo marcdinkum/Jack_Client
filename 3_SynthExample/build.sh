@@ -1,0 +1,1 @@
+clang++ main.cpp -o app -ljack --std=c++20
