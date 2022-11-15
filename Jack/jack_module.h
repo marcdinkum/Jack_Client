@@ -61,9 +61,8 @@ public:
     /// This function is called before process, so you can prepare any of your effects.
     virtual void prepare (int sampleRate) {}
 
-    /// This function is called every time there new audio data is requested by Jack.
-    /// As an argument you get an `AudioBuffer` with the incoming audio signal and an array in which you
-    /// can store your output.
+    /// This function is called when Jack requests new audio data. An instance of `AudioBuffer` is passed as an argument, which
+    /// can be used to collect incoming audio and send outgoing sample data.
     virtual void process (AudioBuffer buffer) {}
 };
 
@@ -82,7 +81,7 @@ public:
     /// `inputClient` and `outputClient`.
     void init (int numInputs,
                int numOutputs,
-               std::string_view clientName = "JackClient",
+               std::string_view clientName = "JackModule",
                std::string_view inputClient = "system",
                std::string_view outputClient = "system") {
         setNumInputChannels (numInputs);
