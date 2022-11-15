@@ -38,6 +38,5 @@ int main() {
     }
 }
 
-//TODO
-// Comments Taalkundig correct
+
 // auto's vervangen voor ints in forloops
