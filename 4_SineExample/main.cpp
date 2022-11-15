@@ -37,6 +37,3 @@ int main() {
         }
     }
 }
-
-
-// auto's vervangen voor ints in forloops
