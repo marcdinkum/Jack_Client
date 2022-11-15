@@ -132,11 +132,11 @@ private:
     }
 
     int onProcess (jack_nframes_t numFrames) {
-        for (auto channel = 0; channel < numInputChannels; ++channel) {
+        for (int channel = 0; channel < numInputChannels; ++channel) {
             inputBuffers[channel] = reinterpret_cast<float*> (jack_port_get_buffer (inputPorts[channel], numFrames));
         }
 
-        for (auto channel = 0; channel < numOutputChannels; ++channel) {
+        for (int channel = 0; channel < numOutputChannels; ++channel) {
             outputBuffers[channel] = reinterpret_cast<float*> (jack_port_get_buffer (outputPorts[channel], numFrames));
         }
 
@@ -204,7 +204,7 @@ private:
                 throw std::runtime_error { "Not enough Jack ports for the number of requested input channels" };
             }
 
-            for (auto channel = 0; channel < numInputChannels; ++channel) {
+            for (int channel = 0; channel < numInputChannels; ++channel) {
                 if (jack_connect (client, ports.get()[channel], jack_port_name (inputPorts[channel]))) {
                     throw std::runtime_error { "Cannot connect input ports" };
                 }
@@ -220,7 +220,7 @@ private:
                 throw std::runtime_error { "Not enough Jack ports for the number of requested output channels" };
             }
 
-            for (auto channel = 0; channel < numOutputChannels; ++channel) {
+            for (int channel = 0; channel < numOutputChannels; ++channel) {
                 if (jack_connect (client, jack_port_name (outputPorts[channel]), ports.get()[channel])) {
                     throw std::runtime_error { "Cannot connect output ports" };
                 }
@@ -230,7 +230,7 @@ private:
 
     void registerInputPorts() {
         inputPorts.clear();
-        for (auto channel = 0; channel < numInputChannels; ++channel) {
+        for (int channel = 0; channel < numInputChannels; ++channel) {
             const auto name = "input_" + std::to_string (channel + 1);
             const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
             inputPorts.push_back (port);
@@ -239,7 +239,7 @@ private:
 
     void registerOutputPorts() {
         outputPorts.clear();
-        for (auto channel = 0; channel < numOutputChannels; ++channel) {
+        for (int channel = 0; channel < numOutputChannels; ++channel) {
             const auto name = "output_" + std::to_string (channel + 1);
             const auto port = jack_port_register (client, name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
             outputPorts.push_back (port);
