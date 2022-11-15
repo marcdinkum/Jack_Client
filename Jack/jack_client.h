@@ -69,11 +69,11 @@ public:
 
 /// Jack Client. Make an instance of this (only one per program) and provide it with a reference to your
 /// `AudioCallback` subclass via its constructor. After that call `init()` to start the Jack session.
-class JackModule {
+class JackClient {
 public:
-    explicit JackModule (AudioCallback& audioCallback) : callback (audioCallback) {}
+    explicit JackClient (AudioCallback& audioCallback) : callback (audioCallback) {}
 
-    ~JackModule() {
+    ~JackClient() {
         end();
     }
 
@@ -82,7 +82,7 @@ public:
     /// `inputClient` and `outputClient`.
     void init (int numInputs,
                int numOutputs,
-               std::string_view clientName = "JackModule",
+               std::string_view clientName = "JackClient",
                std::string_view inputClient = "system",
                std::string_view outputClient = "system") {
         setNumInputChannels (numInputs);
@@ -104,7 +104,7 @@ public:
         prepareCallback();
     }
 
-    /// Gives back the sample rate at which Jack is running. Only call this after `init()` has been called
+    /// Returns the sampling rate at which Jack is running. Only call this after `init()` has been called
     int getSampleRate() const {
         return static_cast<int> (jack_get_sample_rate (client));
     }
@@ -129,7 +129,7 @@ private:
     static constexpr auto MAX_OUTPUT_CHANNELS = 2;
 
     static int jackProcessCallback (jack_nframes_t numFrames, void* self) {
-        return (reinterpret_cast<JackModule*> (self))->onProcess (numFrames);
+        return (reinterpret_cast<JackClient*> (self))->onProcess (numFrames);
     }
 
     int onProcess (jack_nframes_t numFrames) {
