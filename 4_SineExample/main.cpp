@@ -1,40 +1,44 @@
 
-#include "../Jack/jack_module.h"
-#include "SimpleSynth.h"
+#include "../Jack/jack_client.h"
+#include <cmath>
+#include <iostream>
 
 
-class Callback : public AudioCallback {
+class CustomCallback : public AudioCallback {
 public:
-    Callback (SimpleSynth& synth) : synth (synth) {}
-
-    void prepare(int sampleRate) override {
-        synth.prepare(sampleRate);
-    }
-
     void process (AudioBuffer buffer) override {
-        for (auto sample = 0; sample < buffer.numFrames; ++sample) {
-            for (auto channel = 0; channel < buffer.numOutputChannels; ++channel) {
-                buffer.outputChannels[channel][sample] = synth.output();
-            }
+        for (int i = 0; i < buffer.numFrames; ++i) {
+            phase += frequency / sampleRate;
+            // write sample to buffer at channel 0
+            buffer.outputChannels[0][i] = sin (phase * pi * 2.0f);
         }
     }
 
 private:
-    SimpleSynth& synth;
+    const float pi = acos (-1);  //atan(1) * 4; <-- vak van Pieter.
+    float phase = 0;
+    float frequency = 440;
+    float sampleRate = 48000;
 };
 
 // ================================================================================
 
 int main() {
+    auto callback = CustomCallback {};
+    auto jackClient = JackClient { callback };
 
-    auto simpleSynth = SimpleSynth{};
-    auto callback = Callback { simpleSynth  };
-    auto jackModule = JackModule { callback };
+    jackClient.init (0, 1);
 
-    jackModule.init (2, 2);
-
-    auto running = true;
+    bool running = true;
     while (running) {
+        switch (std::cin.get()) {
+            case 'q':
+                running = false;
+        }
     }
-
 }
+
+//TODO
+// Comments Taalkundig correct
+// auto's vervangen voor ints in forloops
+// 
