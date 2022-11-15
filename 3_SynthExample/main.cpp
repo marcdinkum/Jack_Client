@@ -7,8 +7,8 @@ class Callback : public AudioCallback {
 public:
     Callback (SimpleSynth& synth) : synth (synth) {}
 
-    void prepare(int sampleRate) override {
-        synth.prepare(sampleRate);
+    void prepare (int sampleRate) override {
+        synth.prepare (sampleRate);
     }
 
     void process (AudioBuffer buffer) override {
@@ -26,9 +26,8 @@ private:
 // ================================================================================
 
 int main() {
-
-    auto simpleSynth = SimpleSynth{};
-    auto callback = Callback { simpleSynth  };
+    auto simpleSynth = SimpleSynth {};
+    auto callback = Callback { simpleSynth };
     auto jackModule = JackModule { callback };
 
     jackModule.init (2, 2);
@@ -36,5 +35,4 @@ int main() {
     auto running = true;
     while (running) {
     }
-
 }

@@ -22,7 +22,6 @@ struct Callback : public AudioCallback {
 
 private:
     std::array<Tremolo, 2> tremolos;
-
 };
 
 

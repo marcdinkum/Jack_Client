@@ -6,10 +6,10 @@
 #include <cmath>
 
 struct Sine {
-    void prepareToPlay(double sampleRate){
+    void prepareToPlay (double sampleRate) {
         samplerate = sampleRate;
         resetPhase();
-        setDelta(2);
+        setDelta (2);
     }
 
     float output() {

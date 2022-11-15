@@ -5,22 +5,21 @@
 #include "oscillator.h"
 
 struct SimpleSynth {
-    float output(){
+    float output() {
         return sine.output();
     }
-    void prepare(double sampleRate){
-        sine.setSampleRate(sampleRate);
+    void prepare (double sampleRate) {
+        sine.setSampleRate (sampleRate);
     }
 
-    void setPitch(float pitch){
-        sine.setFrequency(mtof(pitch));
+    void setPitch (float pitch) {
+        sine.setFrequency (mtof (pitch));
     }
 
 private:
-    inline float mtof(float midiPitch){
-        return 440.0f * std::pow(2.0f, (midiPitch - 69.0f) / 12.0f);
+    inline float mtof (float midiPitch) {
+        return 440.0f * std::pow (2.0f, (midiPitch - 69.0f) / 12.0f);
     }
 
-    Sine sine{48000};
-
+    Sine sine { 48000 };
 };

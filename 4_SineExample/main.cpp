@@ -6,7 +6,7 @@
 
 class CustomCallback : public AudioCallback {
 public:
-    void prepare(int rate) override {
+    void prepare (int rate) override {
         sampleRate = (float) rate;
     }
 
