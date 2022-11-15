@@ -1,39 +1,40 @@
 
-#include "../Jack/jack_module.h"
-#include <cmath>
-#include <iostream>
-#include <thread>
-#include <vector>
+#include "../Jack/jack_client.h"
+#include "SimpleSynth.h"
 
 
 class Callback : public AudioCallback {
 public:
-    Callback (RMSAnalyzer& analyzer) : analyzer (analyzer) {}
+    Callback (SimpleSynth& synth) : synth (synth) {}
+
+    void prepare(int sampleRate) override {
+        synth.prepare(sampleRate);
+    }
 
     void process (AudioBuffer buffer) override {
         for (auto sample = 0; sample < buffer.numFrames; ++sample) {
-            const auto inputSample = buffer.inputChannels[0][sample];
-            analyzer.analyze (inputSample);
-
             for (auto channel = 0; channel < buffer.numOutputChannels; ++channel) {
-                buffer.outputChannels[channel][sample] = inputSample;
+                buffer.outputChannels[channel][sample] = synth.output();
             }
         }
     }
 
 private:
-    RMSAnalyzer& analyzer;
+    SimpleSynth& synth;
 };
 
 // ================================================================================
 
 int main() {
-    auto callback = Callback {  };
+
+    auto simpleSynth = SimpleSynth{};
+    auto callback = Callback { simpleSynth  };
     auto jackModule = JackModule { callback };
 
     jackModule.init (2, 2);
 
     auto running = true;
     while (running) {
+    }
 
 }

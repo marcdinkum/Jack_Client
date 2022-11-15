@@ -17,6 +17,9 @@ struct Oscillator {
     void setFrequency (float frequency) {
         delta = frequency / sampleRate;
     }
+    void setSampleRate (float Fs){
+        sampleRate = Fs;
+    }
 
     virtual float calculate() = 0;
 
