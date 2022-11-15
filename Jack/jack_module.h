@@ -69,11 +69,11 @@ public:
 
 /// Jack Client. Make an instance of this (only one per program) and provide it with a reference to your
 /// `AudioCallback` subclass via its constructor. After that call `init()` to start the Jack session.
-class JackClient {
+class JackModule {
 public:
-    explicit JackClient (AudioCallback& audioCallback) : callback (audioCallback) {}
+    explicit JackModule (AudioCallback& audioCallback) : callback (audioCallback) {}
 
-    ~JackClient() {
+    ~JackModule() {
         end();
     }
 
@@ -129,7 +129,7 @@ private:
     static constexpr auto MAX_OUTPUT_CHANNELS = 2;
 
     static int jackProcessCallback (jack_nframes_t numFrames, void* self) {
-        return (reinterpret_cast<JackClient*> (self))->onProcess (numFrames);
+        return (reinterpret_cast<JackModule*> (self))->onProcess (numFrames);
     }
 
     int onProcess (jack_nframes_t numFrames) {

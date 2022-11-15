@@ -1,5 +1,5 @@
 
-#include "../Jack/jack_client.h"
+#include "../Jack/jack_module.h"
 #include <cmath>
 #include <iostream>
 
@@ -25,9 +25,9 @@ private:
 
 int main() {
     auto callback = CustomCallback {};
-    auto jackClient = JackClient { callback };
+    auto jackModule = JackModule { callback };
 
-    jackClient.init (0, 1);
+    jackModule.init (0, 1);
 
     bool running = true;
     while (running) {

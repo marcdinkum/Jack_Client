@@ -1,5 +1,5 @@
 
-#include "../Jack/jack_client.h"
+#include "../Jack/jack_module.h"
 #include <cmath>
 #include <iostream>
 #include <thread>

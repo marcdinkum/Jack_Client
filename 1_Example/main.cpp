@@ -1,5 +1,5 @@
 
-#include "../Jack/jack_client.h"
+#include "../Jack/jack_module.h"
 #include "tremolo.h"
 #include <array>
 #include <iostream>
