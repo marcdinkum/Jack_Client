@@ -6,6 +6,10 @@
 
 class CustomCallback : public AudioCallback {
 public:
+    void prepare(int rate) override {
+        sampleRate = (float) rate;
+    }
+
     void process (AudioBuffer buffer) override {
         for (int i = 0; i < buffer.numFrames; ++i) {
             phase += frequency / sampleRate;
