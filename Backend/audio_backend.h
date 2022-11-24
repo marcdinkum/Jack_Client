@@ -65,7 +65,7 @@ public:
     virtual void process (AudioBuffer buffer) {}
 };
 
-#ifndef USE_PORT_AUDIO_BACKEND
+#ifdef ENABLE_JACK_BACKEND
 #include <jack/jack.h>
 
 /// Jack Client. Make an instance of this (only one per program) and provide it with a reference to your
@@ -286,10 +286,10 @@ private:
 };
 
 using AudioBackend = JackModule;
-#endif // not defined USE_PORT_AUDIO_BACKEND
+#endif // ENABLE_JACK_BACKEND
 // ========================================================================================
 
-#ifdef USE_PORT_AUDIO_BACKEND
+#ifdef ENABLE_PORT_AUDIO_BACKEND
 #include <portaudio.h>
 
 class PortAudioModule {
@@ -447,4 +447,4 @@ private:
 
 using AudioBackend = PortAudioModule;
 
-#endif  // defined USE_PORT_AUDIO_BACKEND
+#endif  // defined ENABLE_PORT_AUDIO_BACKEND

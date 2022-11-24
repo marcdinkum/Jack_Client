@@ -1,5 +1,8 @@
 
-#include "../Jack/jack_module.h"
+#define ENABLE_JACK_BACKEND
+// #define ENABLE_PORT_AUDIO_BACKEND
+
+#include "../Backend/audio_backend.h"
 #include <cmath>
 #include <iostream>
 
@@ -29,9 +32,9 @@ private:
 
 int main() {
     auto callback = CustomCallback {};
-    auto jackModule = JackModule { callback };
+    auto backend = AudioBackend { callback };
 
-    jackModule.init (0, 1);
+    backend.init (0, 1);
 
     bool running = true;
     while (running) {

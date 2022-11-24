@@ -1,8 +1,8 @@
 
-// uncomment this to use portaudio as your backend
-#define USE_PORT_AUDIO_BACKEND
+#define ENABLE_JACK_BACKEND
+// #define ENABLE_PORT_AUDIO_BACKEND
 
-#include "../Jack/jack_module.h"
+#include "../Backend/audio_backend.h"
 #include "tremolo.h"
 #include <array>
 #include <iostream>
@@ -32,9 +32,9 @@ int main() {
     // Your code goes here!
 
     auto callback = Callback {};
-    auto jack_module = AudioBackend (callback);
+    auto backend = AudioBackend (callback);
 
-    jack_module.init (2, 2);
+    backend.init (2, 2);
 
 
     auto running = true;

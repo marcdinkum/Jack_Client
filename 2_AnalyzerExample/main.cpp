@@ -1,5 +1,8 @@
 
-#include "../Jack/jack_module.h"
+#define ENABLE_JACK_BACKEND
+// #define ENABLE_PORT_AUDIO_BACKEND
+
+#include "../Backend/audio_backend.h"
 #include <cmath>
 #include <iostream>
 #include <thread>
@@ -105,9 +108,9 @@ private:
 int main() {
     auto analyzer = RMSAnalyzer { 256 };
     auto callback = Callback { analyzer };
-    auto jackModule = JackModule { callback };
+    auto backend = AudioBackend { callback };
 
-    jackModule.init (2, 2);
+    backend.init (2, 2);
 
     while (true) {
         std::cout << "rms: " << analyzer.getCurrentValue() << "db\n";

@@ -1,5 +1,7 @@
-#define USE_PORT_AUDIO_BACKEND
-#include "../Jack/jack_module.h"
+// #define ENABLE_JACK_BACKEND
+#define ENABLE_PORT_AUDIO_BACKEND
+
+#include "../Backend/audio_backend.h"
 #include "SimpleSynth.h"
 
 
@@ -29,9 +31,9 @@ private:
 int main() {
     auto simpleSynth = SimpleSynth {};
     auto callback = Callback { simpleSynth };
-    auto jackModule = AudioBackend { callback };
+    auto backend = AudioBackend { callback };
 
-    jackModule.init (0, 2);
+    backend.init (0, 2);
 
     auto running = true;
     while (running) {
