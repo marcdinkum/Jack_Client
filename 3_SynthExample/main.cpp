@@ -1,4 +1,4 @@
-
+#define USE_PORT_AUDIO_BACKEND
 #include "../Jack/jack_module.h"
 #include "SimpleSynth.h"
 
@@ -9,6 +9,7 @@ public:
 
     void prepare (int sampleRate) override {
         synth.prepare (sampleRate);
+        synth.setPitch(60);
     }
 
     void process (AudioBuffer buffer) override {
@@ -28,9 +29,9 @@ private:
 int main() {
     auto simpleSynth = SimpleSynth {};
     auto callback = Callback { simpleSynth };
-    auto jackModule = JackModule { callback };
+    auto jackModule = AudioBackend { callback };
 
-    jackModule.init (2, 2);
+    jackModule.init (0, 2);
 
     auto running = true;
     while (running) {

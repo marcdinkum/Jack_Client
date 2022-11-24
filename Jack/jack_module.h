@@ -36,7 +36,6 @@
 
 #pragma once
 
-#include <jack/jack.h>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -65,6 +64,9 @@ public:
     /// can be used to collect incoming audio and send outgoing sample data.
     virtual void process (AudioBuffer buffer) {}
 };
+
+#ifndef USE_PORT_AUDIO_BACKEND
+#include <jack/jack.h>
 
 /// Jack Client. Make an instance of this (only one per program) and provide it with a reference to your
 /// `AudioCallback` subclass via its constructor. After that call `init()` to start the Jack session.
@@ -282,3 +284,167 @@ private:
         exit (1);
     }
 };
+
+using AudioBackend = JackModule;
+#endif // not defined USE_PORT_AUDIO_BACKEND
+// ========================================================================================
+
+#ifdef USE_PORT_AUDIO_BACKEND
+#include <portaudio.h>
+
+class PortAudioModule {
+public:
+    explicit PortAudioModule (AudioCallback& callback) : callback { callback } {}
+
+    void init (int numInputs, int numOutputs, int sampleRate = 44100, int framesPerBuffer = 512) {
+        if (Pa_Initialize() != paNoError) {
+            throw std::runtime_error ("failed to initialize port audio");
+        }
+
+        inputParams = getInputParameters (numInputs);
+        outputParams = getOutputParameters (numOutputs);
+
+        const auto numInputSamplesPerBuffer = numInputs * framesPerBuffer;
+        const auto numOutputSamplesPerBuffer = numOutputs * framesPerBuffer;
+
+        inputScratchBuffer.resize (numInputSamplesPerBuffer, 0.0);
+        outputScratchBuffer.resize (numOutputSamplesPerBuffer, 0.0);
+
+        for (auto channel = 0; channel < numInputs; ++channel) {
+            inputChannels.push_back (inputScratchBuffer.data() + channel * framesPerBuffer);
+        }
+
+        for (auto channel = 0; channel < numOutputs; ++channel) {
+            outputChannels.push_back (outputScratchBuffer.data() + channel * framesPerBuffer);
+        }
+
+        callback.prepare (sampleRate);
+
+        auto error = Pa_OpenStream (&stream,
+                                    inputParams.get(),
+                                    outputParams.get(),
+                                    sampleRate,
+                                    framesPerBuffer,
+                                    paClipOff,
+                                    &PortAudioModule::internalCallback,
+                                    this);
+
+        if (error != paNoError) {
+            throw std::runtime_error ("failed to open stream");
+        }
+
+        Pa_SetStreamFinishedCallback (stream, &PortAudioModule::streamFinished);
+
+        if (Pa_StartStream (stream) != paNoError) {
+            throw std::runtime_error ("failed to start stream");
+        }
+    }
+
+    ~PortAudioModule() {
+        end();
+    }
+
+private:
+    AudioCallback& callback;
+    std::unique_ptr<PaStreamParameters> inputParams;
+    std::unique_ptr<PaStreamParameters> outputParams;
+    std::vector<float> inputScratchBuffer;
+    std::vector<float> outputScratchBuffer;
+    std::vector<float*> inputChannels;
+    std::vector<float*> outputChannels;
+    PaStream* stream {};
+
+    static std::unique_ptr<PaStreamParameters> getInputParameters (int numInputs) {
+        if (numInputs == 0) {
+            return nullptr;
+        }
+
+        auto params = std::make_unique<PaStreamParameters>();
+        params->device = Pa_GetDefaultInputDevice();
+
+        if (params->device == paNoDevice) {
+            throw std::runtime_error ("no default input device");
+        }
+
+        params->channelCount = numInputs;
+        params->sampleFormat = paFloat32;
+        params->suggestedLatency = Pa_GetDeviceInfo (params->device)->defaultLowOutputLatency;
+        params->hostApiSpecificStreamInfo = nullptr;
+        return params;
+    }
+
+    static std::unique_ptr<PaStreamParameters> getOutputParameters (int numOutputs) {
+        if (numOutputs == 0) {
+            return nullptr;
+        }
+
+        auto params = std::make_unique<PaStreamParameters>();
+        params->device = Pa_GetDefaultOutputDevice();
+
+        if (params->device == paNoDevice) {
+            throw std::runtime_error ("no default input device");
+        }
+
+        params->channelCount = numOutputs;
+        params->sampleFormat = paFloat32;
+        params->suggestedLatency = Pa_GetDeviceInfo (params->device)->defaultLowOutputLatency;
+        params->hostApiSpecificStreamInfo = nullptr;
+        return params;
+    }
+
+    void end() {
+        if (Pa_StopStream (stream) != paNoError) {
+            throw std::runtime_error ("failed to stop stream");
+        }
+
+        if (Pa_CloseStream (stream) != paNoError) {
+            throw std::runtime_error ("failed to close stream");
+        }
+
+        Pa_Terminate();
+    }
+
+    static int internalCallback (const void* inputBuffer,
+                                 void* outputBuffer,
+                                 unsigned long framesPerBuffer,
+                                 const PaStreamCallbackTimeInfo* timeInfo,
+                                 PaStreamCallbackFlags statusFlags,
+                                 void* userData) {
+        auto& self = *reinterpret_cast<PortAudioModule*> (userData);
+        const auto numInputs = self.inputParams == nullptr ? 0 : self.inputParams->channelCount;
+        const auto numOutputs = self.outputParams == nullptr ? 0 : self.outputParams->channelCount;
+
+        auto* input = (float*) inputBuffer;
+        auto* output = (float*) outputBuffer;
+
+        for (auto sample = 0; sample < framesPerBuffer; ++sample) {
+            for (auto channel = 0; channel < numInputs; ++channel) {
+                self.inputChannels[channel][sample] = input[sample * numInputs + channel];
+            }
+        }
+
+        const auto buffer = AudioBuffer {
+            .inputChannels = const_cast<const float**> (self.inputChannels.data()),
+            .outputChannels = self.outputChannels.data(),
+            .numInputChannels = numInputs,
+            .numOutputChannels = numOutputs,
+            .numFrames = static_cast<int> (framesPerBuffer),
+        };
+
+        self.callback.process (buffer);
+
+        for (auto sample = 0; sample < framesPerBuffer; ++sample) {
+            for (auto channel = 0; channel < numOutputs; ++channel) {
+                output[sample * numOutputs + channel] = buffer.outputChannels[channel][sample];
+            }
+        }
+
+        return 0;
+    }
+
+    static void streamFinished (void* userData) {}
+};
+
+using AudioBackend = PortAudioModule;
+
+#endif  // defined USE_PORT_AUDIO_BACKEND
