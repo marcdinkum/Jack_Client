@@ -18,10 +18,10 @@
 *  If not, see <http://www.gnu.org/licenses/>.
 ***********************************************************************
 *
-*  File name     : jack_module.h
-*  System name   : jack_module
+*  File name     : audio_backend.h
+*  System name   : audio_backend
 *
-*  Description   : C++ abstraction for JACK Audio Connection Kit
+*  Description   : C++ abstraction for various audio backends
 *
 *
 *  Authors       : Marc Groenewegen,
@@ -64,6 +64,7 @@ public:
     /// can be used to collect incoming audio and send outgoing sample data.
     virtual void process (AudioBuffer buffer) {}
 };
+
 
 #ifdef ENABLE_JACK_BACKEND
 #include <jack/jack.h>
@@ -286,7 +287,7 @@ private:
 };
 
 using AudioBackend = JackModule;
-#endif // ENABLE_JACK_BACKEND
+#endif  // ENABLE_JACK_BACKEND
 // ========================================================================================
 
 #ifdef ENABLE_PORT_AUDIO_BACKEND
