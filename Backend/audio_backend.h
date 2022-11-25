@@ -415,8 +415,8 @@ private:
         const auto numInputs = self.inputParams == nullptr ? 0 : self.inputParams->channelCount;
         const auto numOutputs = self.outputParams == nullptr ? 0 : self.outputParams->channelCount;
 
-        auto* input = (float*) inputBuffer;
-        auto* output = (float*) outputBuffer;
+        auto* input = reinterpret_cast<float*> (inputBuffer);
+        auto* output = reinterpret_cast<float*> (outputBuffer);
 
         for (auto sample = 0; sample < framesPerBuffer; ++sample) {
             for (auto channel = 0; channel < numInputs; ++channel) {
