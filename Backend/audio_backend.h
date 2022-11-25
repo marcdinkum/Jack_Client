@@ -71,11 +71,11 @@ public:
 
 /// Jack Client. Make an instance of this (only one per program) and provide it with a reference to your
 /// `AudioCallback` subclass via its constructor. After that call `init()` to start the Jack session.
-class JackModule {
+class JackBackend {
 public:
-    explicit JackModule (AudioCallback& audioCallback) : callback (audioCallback) {}
+    explicit JackBackend (AudioCallback& audioCallback) : callback (audioCallback) {}
 
-    ~JackModule() {
+    ~JackBackend() {
         end();
     }
 
@@ -131,7 +131,7 @@ private:
     static constexpr auto MAX_OUTPUT_CHANNELS = 2;
 
     static int jackProcessCallback (jack_nframes_t numFrames, void* self) {
-        return (reinterpret_cast<JackModule*> (self))->onProcess (numFrames);
+        return (reinterpret_cast<JackBackend*> (self))->onProcess (numFrames);
     }
 
     int onProcess (jack_nframes_t numFrames) {
@@ -286,16 +286,16 @@ private:
     }
 };
 
-using AudioBackend = JackModule;
+using AudioBackend = JackBackend;
 #endif  // ENABLE_JACK_BACKEND
 // ========================================================================================
 
 #ifdef ENABLE_PORT_AUDIO_BACKEND
 #include <portaudio.h>
 
-class PortAudioModule {
+class PortAudioBackend {
 public:
-    explicit PortAudioModule (AudioCallback& callback) : callback { callback } {}
+    explicit PortAudioBackend (AudioCallback& callback) : callback { callback } {}
 
     void init (int numInputs, int numOutputs, int sampleRate = 44100, int framesPerBuffer = 512) {
         if (Pa_Initialize() != paNoError) {
@@ -327,21 +327,21 @@ public:
                                     sampleRate,
                                     framesPerBuffer,
                                     paClipOff,
-                                    &PortAudioModule::internalCallback,
+                                    &PortAudioBackend::internalCallback,
                                     this);
 
         if (error != paNoError) {
             throw std::runtime_error ("failed to open stream");
         }
 
-        Pa_SetStreamFinishedCallback (stream, &PortAudioModule::streamFinished);
+        Pa_SetStreamFinishedCallback (stream, &PortAudioBackend::streamFinished);
 
         if (Pa_StartStream (stream) != paNoError) {
             throw std::runtime_error ("failed to start stream");
         }
     }
 
-    ~PortAudioModule() {
+    ~PortAudioBackend() {
         end();
     }
 
@@ -411,7 +411,7 @@ private:
                                  const PaStreamCallbackTimeInfo* timeInfo,
                                  PaStreamCallbackFlags statusFlags,
                                  void* userData) {
-        auto& self = *reinterpret_cast<PortAudioModule*> (userData);
+        auto& self = *reinterpret_cast<PortAudioBackend*> (userData);
         const auto numInputs = self.inputParams == nullptr ? 0 : self.inputParams->channelCount;
         const auto numOutputs = self.outputParams == nullptr ? 0 : self.outputParams->channelCount;
 
@@ -446,6 +446,6 @@ private:
     static void streamFinished (void* userData) {}
 };
 
-using AudioBackend = PortAudioModule;
+using AudioBackend = PortAudioBackend;
 
 #endif  // defined ENABLE_PORT_AUDIO_BACKEND
