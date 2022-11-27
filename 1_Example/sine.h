@@ -17,6 +17,7 @@ struct Sine {
         if (phase > 1.0) phase -= 1.0f;
         return calculate();
     }
+    
     float calculate() {
         return sin (phase * pi * 2.0f);
     }
@@ -25,9 +26,11 @@ struct Sine {
         currentFrequency = frequency;
         this->delta = currentFrequency / samplerate;
     }
+    
     double getFrequency() {
         return currentFrequency;
     }
+    
     void resetPhase() {
         phase = 0;
     }
