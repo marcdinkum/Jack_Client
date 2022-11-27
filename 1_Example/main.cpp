@@ -4,7 +4,10 @@
 #include <array>
 #include <iostream>
 
-struct Callback : public AudioCallback {
+class Callback : public AudioCallback {
+    
+public:
+
     void prepare (int sampleRate) override {
         for (auto& tremolo : tremolos)
             tremolo.prepareToPlay (static_cast<double> (sampleRate));
